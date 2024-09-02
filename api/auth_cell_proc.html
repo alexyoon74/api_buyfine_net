@@ -1,0 +1,465 @@
+<?
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+if($_POST['i_h_r'])
+{
+	$is_need_json_header = 0;
+}
+if(preg_match("/MicroMessenger/i", $_SERVER['HTTP_USER_AGENT']))
+{
+	if(preg_match("/wxmp.buyfine.net/i", $_SERVER['HTTP_HOST']))
+	{
+		$method = strtoupper($_SERVER["REQUEST_METHOD"]);
+		if($method != 'POST')
+		{
+			Header("Location:/main.html?istnc=1");
+			exit;
+			/*
+			echo("
+				<script>
+					alert('出现错误。- 如果继续出现错误请与管理者联系。');
+					location.href=\"/main.html?istnc=1\";
+				</script>
+			"); 
+			exit;
+			*/
+		}
+		else
+		{
+			if($_COOKIE['ud'])
+			{
+				Header("Location:/main.html?istnc=1");
+				exit;
+			}
+		}
+	}
+}
+$IS_NO_NEED_MP_JS_CHECK = 1;
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+if(!$INCLUDE_COMM) include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+if(!$IS_FUNC_CORE) include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+
+$is_no_err = 1;
+$result_num = 0;
+$err_id = "";
+
+$arr_skip_replace_para = array('hidden_auth_str');
+if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+
+$arr_static_message = array();
+$expired_sms_num_minute = 15;
+$check_re_sms_minute = 3;
+$m_type = "";
+$auth_str = "";
+$hidden_auth_str = "";
+$de_auth_str = "";
+$cell_num = "";
+$view_cell_num = "";
+$return_sms = "";
+$auth_sms_num = 0;
+if($is_no_err > 0)
+{
+	if($arr_req_data['mType'])
+	{
+		$m_type = $arr_req_data['mType'];
+	}
+	if($arr_req_data['cell_num'])
+	{
+		$cell_num = @trim(func_str_no_space($arr_req_data['cell_num'], 2));
+	}
+	if($arr_req_data['login_cell_num'])
+	{
+		$cell_num = @trim(func_str_no_space($arr_req_data['login_cell_num'], 2));
+	}
+	if($arr_req_data['auth_str'])
+	{
+		$auth_str = @trim(strtoupper($arr_req_data['auth_str']));
+	}
+	if($arr_req_data['hidden_auth_str'])
+	{
+		$hidden_auth_str = @trim($arr_req_data['hidden_auth_str']);
+		$de_auth_str = strtoupper(MD5D($hidden_auth_str, $md5_key));
+	}
+	if($arr_req_data['auth_sms_num'])
+	{
+		$auth_sms_num = @trim(func_str_no_space($arr_req_data['auth_sms_num'], 2));
+		$auth_sms_num = intval($auth_sms_num);
+	}
+	$arr_cell_num_check_mType = array('s1','s2');
+	$arr_auth_str_same_check_mType = array('s1');
+	$arr_auth_sms_num_check_mType = array('s2');
+	if(in_array($m_type, $arr_cell_num_check_mType))
+	{
+		if($is_no_err>0 && !$cell_num)
+		{
+			$is_no_err = 0;
+			$result_num = -29;
+			$err_id = "cell_num";
+		}
+		if($is_no_err > 0)
+		{
+			$isTrue = "T";
+			$check_chr = preg_match("/[^[:digit:]]/", $cell_num);
+			if($check_chr)
+			{
+				$isTrue = "F";
+			}
+			$first_cell_str = substr($cell_num,0,1);
+			if($first_cell_str != '1')
+			{
+				$isTrue = "F";
+			}
+			if($isTrue == 'F')
+			{
+				$is_no_err = 0;
+				$result_num = -59;
+				$err_id = "cell_num";
+			}
+		}
+		if($is_no_err>0)
+		{
+			$check_len = strlen($cell_num);
+			if($check_len != 11)
+			{
+				$is_no_err = 0;
+				$result_num = -60;
+				$err_id = "cell_num";
+			}
+		}
+	}
+	if(in_array($m_type, $arr_auth_str_same_check_mType))
+	{
+		if($is_yes_print>0)
+		{
+			echo "{$auth_str} = {$de_auth_str}<br />";
+		}
+		if($is_no_err>0 && $auth_str!=$de_auth_str)
+		{
+			$is_no_err = 0;
+			$result_num = -58;
+			$err_id = "auth_str";
+		}
+	}
+	if(in_array($m_type, $arr_auth_sms_num_check_mType))
+	{
+		if($is_yes_print>0)
+		{
+			echo "{$auth_str} = {$de_auth_str}<br />";
+		}
+		if($is_no_err>0 && $auth_sms_num<1)
+		{
+			$is_no_err = 0;
+			$result_num = -79;
+			$err_id = "auth_sms_num";
+		}
+	}
+	unset($arr_cell_num_check_mType);
+	unset($arr_auth_str_same_check_mType);
+}
+$arr_err_query_err = array();
+if($is_no_err>0 && $m_type)
+{
+	if($m_type === 's1')
+	{
+		$dbconn = dbPDOConn($member_db,$member_host);
+		$sms_num = random_str(6, 61);
+		$query = "SELECT cell_num, update_time FROM {$member_db}.member_cell_auth WHERE cell_num='{$cell_num}'";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$row = $sql->fetch(PDO::FETCH_ASSOC);
+		$sql->closeCursor();
+		if($row['cell_num'])
+		{
+			$arr_date = func_dateNhour_term($row['update_time'], date("Y-m-d H:i:s"));
+			if($arr_date['date']<1 && $arr_date['hour']<1 && $arr_date['minute']<$check_re_sms_minute)
+			{
+				$is_no_err = 0;
+				$result_num = -78;
+			}
+			else
+			{
+				$query = "UPDATE {$member_db}.member_cell_auth SET sms_num={$sms_num}, proc_num=proc_num+1, update_time=now() WHERE cell_num='{$cell_num}'";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->prepare($query);
+				$sql->execute();
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				$arr_mysql_err = $sql->errorInfo();
+				$mysql_errno = (int) $arr_mysql_err['1'];
+				unset($arr_mysql_err);
+				if($mysql_errno != '0')
+				{
+					$is_no_err = 0;
+					$result_num = -76;
+				}
+				$sql->closeCursor();
+			}
+			unset($arr_date);
+		}
+		else
+		{
+			$query = "INSERT INTO {$member_db}.member_cell_auth (cell_num,sms_num,proc_num,update_time,regist_time) VALUES ('{$cell_num}',{$sms_num},1,now(),now())";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql = $dbconn->prepare($query);
+			$sql->execute();
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+			$arr_mysql_err = $sql->errorInfo();
+			$mysql_errno = (int) $arr_mysql_err['1'];
+			unset($arr_mysql_err);
+			if($mysql_errno != '0')
+			{
+				$is_no_err = 0;
+				$result_num = -77;
+			}
+			$sql->closeCursor();
+		}
+		dbPDOClose($member_db,$member_host);
+		if($is_no_err > 0)
+		{
+			$sms_msg = "您本次验证码为{$sms_num}，{$expired_sms_num_minute}分钟内有效。请勿将验证码供他人使用，谨防欺诈";
+			//$return_sms = "0";
+			$return_sms = fsockopen_normal_sms($sms_msg,$cell_num);
+			if($return_sms == '0')
+			{
+				$result_num = 1;
+				$cell_1 = substr($cell_num, 0, 3);
+				$cell_2 = substr($cell_num, 3, 4);
+				$cell_3 = substr($cell_num, 7, 4);
+				$view_cell_num = $cell_1." ".$cell_2." ".$cell_3;
+			}
+			else
+			{
+				$is_no_err = 0;
+				$result_num = -68;
+			}
+		}
+	}
+	else if($m_type === 's2')
+	{
+		$m_uid = 0;
+		$bf_email = "";
+		$bf_passwd = "";
+		$dbconn = dbPDOConn($member_db,$member_host);
+		$query = "SELECT cell_num, sms_num, update_time FROM {$member_db}.member_cell_auth WHERE cell_num='{$cell_num}'";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$row = $sql->fetch(PDO::FETCH_ASSOC);
+		$sql->closeCursor();
+		if($row['cell_num'] && $row['sms_num'] && $row['update_time'])
+		{
+			$arr_date = func_dateNhour_term($row['update_time'], date("Y-m-d H:i:s"));
+			if($arr_date['date']>0 || $arr_date['hour']>0 || $arr_date['minute']>$expired_sms_num_minute)
+			{
+				$is_no_err = 0;
+				$result_num = -80;
+				$arr_static_message[$result_num] = "您所输入的验证码已过{$expired_sms_num_minute}分钟有效期，请重新获取有效验证码";
+			}
+			else if($auth_sms_num == $row['sms_num'])
+			{
+				if($ARR_BF_STATIC_CELL_LOGIN_INFO[$row['cell_num']]['m_uid'])//$ARR_BF_STATIC_CELL_LOGIN_INFO assign COMM_FUNC.inc
+				{
+					$m_uid = $ARR_BF_STATIC_CELL_LOGIN_INFO[$row['cell_num']]['m_uid'];
+				}
+				else
+				{
+					$query = "SELECT m_uid FROM {$member_db}.member_info WHERE cell='{$row['cell_num']}' ORDER BY m_uid ASC LIMIT 0, 1";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql = $dbconn->prepare($query);
+					$sql->execute();
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+					$row = $sql->fetch(PDO::FETCH_ASSOC);
+					$sql->closeCursor();
+					if($row['m_uid'])
+					{
+						$m_uid = $row['m_uid'];
+					}
+				}
+			}
+			else
+			{
+				$is_no_err = 0;
+				$result_num = -79;
+				$err_id = "auth_sms_num";
+			}
+		}
+		else
+		{
+			$is_no_err = 0;
+			$result_num = -79;
+			$err_id = "auth_sms_num";
+		}
+		if($is_no_err > 0)
+		{
+			if($m_uid > 0)
+			{
+				$query = "SELECT M.email, M.passwd FROM {$member_db}.member M WHERE M.m_uid={$m_uid}";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->prepare($query);
+				$sql->execute();
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				$row = $sql->fetch(PDO::FETCH_ASSOC);
+				$sql->closeCursor();
+				if($row['email'] && $row['passwd'])
+				{
+					$bf_email = $row['email'];
+					$bf_passwd = strtolower(MD5D($row['passwd'], $md5_key));
+				}
+			}
+			if(!$bf_email || !$bf_passwd)//회원가입 start
+			{
+				$passwd_1 = $auth_sms_num;
+				$en_passwd_1 = MD5E($passwd_1, $md5_key);
+				$date_str = date("ymdhis");
+				$email = "cell_{$cell_num}_{$date_str}@buyfine.net";
+				$nickname = $cell_num;
+				$name = $nickname;
+				$passwd_q = 1;
+				$passwd_a = "Cell Login {$auth_sms_num}";
+				$birth_y = date("Y");
+				$birth_m = date("n");
+				$birth_d = date("j");
+				$auth_str = random_str(4, 1);
+				$query = "INSERT INTO {$member_db}.member (email,nickname,passwd,isAvailable,regist_date) VALUES ('{$email}', '{$nickname}', '{$en_passwd_1}', 2, curdate())";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->prepare($query);
+				$sql->execute();
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				$arr_mysql_err = $sql->errorInfo();
+				$mysql_errno = (int) $arr_mysql_err['1'];
+				unset($arr_mysql_err);
+				if($mysql_errno != '0')
+				{
+					$sql->closeCursor();
+					$arr_err_query_err[] = $mysql_errno." : ".$query;
+					$is_no_err = 0;
+					$result_num = -68;
+				}
+				else
+				{
+					$m_uid = $dbconn->lastInsertId();
+					$sql->closeCursor();
+				}
+				if($m_uid > 0)
+				{
+					$query = "INSERT INTO {$member_db}.member_info (m_uid,receive_email,passwd_q,passwd_a,name,birth_y,birth_m,birth_d,phone,cell,is_first_cell_join,regist_time) VALUES ({$m_uid},'{$email}',{$passwd_q},'{$passwd_a}','{$name}','{$birth_y}','{$birth_m}','{$birth_d}','{$cell_num}','{$cell_num}',1,now())";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql = $dbconn->prepare($query);
+					$sql->execute();
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+					$arr_mysql_err = $sql->errorInfo();
+					$mysql_errno = (int) $arr_mysql_err['1'];
+					unset($arr_mysql_err);
+					if($mysql_errno != '0')
+					{
+						$sql->closeCursor();
+						$arr_err_query_err[] = $mysql_errno." : ".$query;
+						$dbconn->query("DELETE FROM {$member_db}.member WHERE m_uid={$m_uid}");
+						$is_no_err = 0;
+						$result_num = -76;
+					}
+					else
+					{
+						$sql->closeCursor();
+						$query = "INSERT INTO {$member_db}.member_auth (m_uid,auth_str,isCheck) VALUES ({$m_uid},'{$auth_str}',1)";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						$arr_mysql_err = $sql->errorInfo();
+						$mysql_errno = (int) $arr_mysql_err['1'];
+						unset($arr_mysql_err);
+						if($mysql_errno != '0')
+						{
+							$sql->closeCursor();
+							$arr_err_query_err[] = $mysql_errno." : ".$query;
+							$dbconn->query("DELETE FROM {$member_db}.member WHERE m_uid={$m_uid}");
+							$dbconn->query("DELETE FROM {$member_db}.member_info WHERE m_uid={$m_uid}");
+							$is_no_err = 0;
+							$result_num = -77;
+						}
+						else
+						{
+							$bf_email = $email;
+							$bf_passwd = $passwd_1;
+						}
+					}
+				}
+			}//회원가입 end
+		}
+		dbPDOClose($member_db,$member_host);
+		if($is_no_err>0 && $bf_email && $bf_passwd)
+		{
+			$_POST['is_no_inc'] = 1;
+			$_POST['id'] = $bf_email;
+			$_POST['pwd'] = $bf_passwd;
+			include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/auth_login_proc.html";//auth_login_proc.html > include 처리를 안해줌 - return $result_num, $err_id
+			$err_id = "";//이 값을 초기화 하는이유는 다른 파일에서 auth_login_proc.html 콜해서 처리하는 부분들이 있기 때문
+		}
+	}
+}
+unset($arr_req_data);
+if($is_yes_print>0) 
+{
+	echo "arr_query_runtime=";
+	echo("<pre>");print_r($arr_query_runtime);echo("</pre>");
+	unset($arr_query_runtime);
+}
+if($arr_static_message[$result_num])
+{
+	$message = $arr_static_message[$result_num];
+}
+else
+{
+	$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+}
+unset($arr_static_message);
+$arr_result = array(
+	'result'=>$result_num,
+	'cell_n'=>$view_cell_num,
+	'sms'=>$return_sms,
+	'message'=>$message,
+	'err_id'=>$err_id
+);
+if($result_num == -58)
+{
+	$arr_add_result = array('auth_str'=>$auth_str,'de_auth_str'=>$de_auth_str,'hidden_auth_str'=>$hidden_auth_str);
+	$arr_result = array_merge($arr_result,$arr_add_result);
+}
+if($is_yes_print>1)
+{
+	echo "arr_result=";
+	echo("<pre>");print_r($arr_result);echo("</pre>");
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>

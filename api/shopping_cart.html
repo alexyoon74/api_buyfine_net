@@ -1,0 +1,508 @@
+<?
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+if($_COOKIE['BF_NAM'] && !$_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+else if($_COOKIE['BF_V3_T_M'] && !$_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+else if($_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_size_str.inc";
+if(!$IS_TODAYS_PROMOTION) include_once "{$BF_WWW_SERVER_LOC}/files/etc/arr_todays_promotion.inc";//$BF_WWW_SERVER_LOC assign /inc/config.inc
+
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+
+$is_no_err = 1;
+$result_num = 0;
+
+if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+
+$c_type = "";
+$g_uid = 0;
+$c_uid = 0;
+$sel_c_uid = "";//구분자 쉼표
+$selected_color_str = "";
+$selected_size_str = "";
+$selected_quantity = 0;
+$t_cart_count = 0;
+if($is_no_err > 0)
+{
+	if($arr_req_data['pid'])
+	{
+		$g_uid = floatval("{$arr_req_data['pid']}");//mysql int(11) MAX=4294967295, int(10) MAX=2147483647 -  intval로처리하면 MAX값이 2147483647이걸로 처리됨
+	}
+	if($arr_req_data['c_uid'])
+	{
+		$c_uid = intval("{$arr_req_data['c_uid']}");
+	}
+	if($arr_req_data['sel_c_uid'])
+	{
+		$sel_c_uid = @trim("{$arr_req_data['sel_c_uid']}");
+	}
+	if($arr_req_data['quantity'])
+	{
+		$selected_quantity = intval("{$arr_req_data['quantity']}");
+	}
+	if($arr_req_data['color'])
+	{
+		$selected_color_str = $arr_req_data['color'];
+	}
+	if($arr_req_data['size'])
+	{
+		$selected_size_str = $arr_req_data['size'];
+	}
+	
+	$arr_g_uid_check_cType = array('insert');
+	$arr_c_uid_check_cType = array('update');
+	$arr_sel_c_uid_check_cType = array('sel_del');
+	$arr_cNs_check_cType = array('insert','update');
+	$arr_quantity_check_cType = array('insert','update');
+	
+	if($arr_req_data['cType'] == 'insert')
+	{
+		$c_type = 'insert';
+		//$selected_quantity = 1;//새로 카트에 담을때에는 기본값 1로 세팅함.
+	}
+	else if($arr_req_data['cType'] == 'update')
+	{
+		$c_type = 'update';
+	}
+	else if($arr_req_data['cType'] == 'sel_del')
+	{
+		$c_type = 'sel_del';
+	}
+	else if($arr_req_data['cType'] == 'all_del')
+	{
+		$c_type = 'all_del';
+	}
+	else
+	{
+		//$c_type = 'list';
+	}
+	
+	if($is_no_err>0 && !$c_type)
+	{
+		$is_no_err = 0;
+		$result_num = -56;
+	}
+	if(in_array($c_type, $arr_g_uid_check_cType))
+	{
+		if($is_no_err>0 && !$g_uid)
+		{
+			$is_no_err = 0;
+			$result_num = -16;
+		}
+	}
+	if(in_array($c_type, $arr_c_uid_check_cType))
+	{
+		if($is_no_err>0 && !$c_uid)
+		{
+			$is_no_err = 0;
+			$result_num = -20;
+		}
+	}
+	if(in_array($c_type, $arr_cNs_check_cType))
+	{
+		if($is_no_err>0 && !$selected_color_str)
+		{
+			$is_no_err = 0;
+			$result_num = -18;
+		}
+		else if($is_no_err>0 && !$selected_size_str)
+		{
+			$is_no_err = 0;
+			$result_num = -19;
+		}
+	}
+	if(in_array($c_type, $arr_quantity_check_cType))
+	{
+		if($is_no_err>0 && !$selected_quantity)
+		{
+			$is_no_err = 0;
+			$result_num = -21;
+		}
+	}
+	if(in_array($c_type, $arr_sel_c_uid_check_cType))
+	{
+		if($is_no_err>0 && !$sel_c_uid)
+		{
+			$is_no_err = 0;
+			$result_num = -22;
+		}
+	}
+	
+	unset($arr_g_uid_check_cType);
+	unset($arr_c_uid_check_cType);
+	unset($arr_sel_c_uid_check_cType);
+	unset($arr_cNs_check_cType);
+	unset($arr_quantity_check_cType);
+		
+}
+
+$arr_cart_insert = array();
+$arr_del_c_uid = array();
+if($is_no_err>0 && $c_type)
+{
+	$result_num = 1;
+	$dbconn = dbPDOConn($goods_db,$goods_host);
+	$cart_tb = "goods_cart";
+	if($_COOKIE['BF_NAM'] && !$_MEMBER['m_uid'])
+	{
+		$cart_tb = "goods_cart_no_auth";
+		$_MEMBER['m_uid'] = $_COOKIE['BF_NAM'];
+	}
+	else if(!$_MEMBER['m_uid'])
+	{
+		$cart_tb = "goods_cart_no_auth";
+		if($is_yes_print>0) 
+		{
+			$arr_multi_query = array();
+			$q_start_time=time();
+		}
+		$query = "LOCK TABLES {$goods_db}.no_auth_temp_m_uid WRITE";
+		if($is_yes_print>0) $arr_multi_query[]=$query;
+		$dbconn->query($query);
+		$query = "SELECT MAX(no_auth_m_uid) AS no_auth_m_uid FROM {$goods_db}.no_auth_temp_m_uid";
+		if($is_yes_print>0) $arr_multi_query[]=$query;
+		$sql = $dbconn->query($query);
+		if(isset($sql))
+		{
+			$row = $sql->fetch(PDO::FETCH_ASSOC);
+			$sql->closeCursor();
+		}
+		if($row['no_auth_m_uid'])
+		{
+			$no_auth_m_uid = $row['no_auth_m_uid']+1;
+		}
+		else
+		{
+			$no_auth_m_uid = 1;
+		}
+		$query = "INSERT INTO {$goods_db}.no_auth_temp_m_uid (no_auth_m_uid) VALUES ({$no_auth_m_uid})";
+		if($is_yes_print>0) $arr_multi_query[]=$query;
+		$dbconn->query($query);
+		$query = "UNLOCK TABLES";
+		if($is_yes_print>0) $arr_multi_query[]=$query;
+		$dbconn->query($query);
+		if($is_yes_print>0) 
+		{
+			if(count($arr_multi_query) > 0)
+			{
+				get_query_runtime($q_start_time,implode("<br />",$arr_multi_query));//get_query_runtime assign COMM_FUNC.inc
+			}
+			unset($arr_multi_query);
+		}
+		/*
+if($_COOKIE['BF_V3_T_M'])
+		{
+			$tc_m_uid = $_COOKIE['BF_V3_T_M'];
+			$query = "UPDATE {$goods_db}.{$cart_tb} SET m_uid={$no_auth_m_uid} WHERE m_uid={$tc_m_uid}";
+			if($is_yes_print>0) $q_start_time=time();
+			$dbconn->query($query);
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		}
+*/
+		setcookie('BF_NAM', $no_auth_m_uid, time()+60*60*24*730, '/', '.buyfine.net');
+		$_MEMBER['m_uid'] = $no_auth_m_uid;
+	}
+	if($selected_color_str)
+	{
+		$selected_color_str = str_replace(" (预订)", "", $selected_color_str);
+		$selected_color_str= str_replace(" [预订]", "", $selected_color_str);
+		$selected_color_str = preg_replace("/\s+/"," ",$selected_color_str);//공백 2칸이상 1칸으로
+	}
+	if($selected_size_str)
+	{
+		$selected_size_str = str_replace(" (预订)", "", $selected_size_str);
+		$selected_size_str= str_replace(" [预订]", "", $selected_size_str);
+		$selected_size_str = preg_replace("/\s+/"," ",$selected_size_str);//공백 2칸이상 1칸으로
+	} 
+	
+	$is_select_t_cart_count = 0;
+	if($c_type == 'insert')
+	{
+		$query = "
+			SELECT 
+				GC.cart_uid, GC.order_count, GC.g_option, GC.g_color
+			FROM
+				{$goods_db}.{$cart_tb} GC
+			WHERE GC.g_uid={$g_uid} 
+			AND GC.m_uid={$_MEMBER['m_uid']}
+			ORDER BY GC.cart_uid
+			LIMIT 0, {$MAX_CART_NUM}
+		";//$MAX_CART_NUM assign COMM_FUNC.inc
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$arr_del_cart_uid = array();
+		$selected_no_s_color = strtolower(func_tmall_str_no_space($selected_color_str, 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+		$selected_no_s_size = strtolower(func_str_no_space($selected_size_str, 2));
+		$selected_no_s_size = @trim(str_ireplace("-PRE-ORDER","",$selected_no_s_size));
+		$selected_no_s_cNs = $selected_no_s_color.$selected_no_s_size;
+		if(isset($sql))
+		{
+			while($row=$sql->fetch(PDO::FETCH_ASSOC))
+			{
+				$no_s_color = strtolower(func_tmall_str_no_space($row['g_color'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+				$no_s_size = strtolower(func_str_no_space($row['g_option'], 2));
+				$no_s_size = @trim(str_ireplace("-PRE-ORDER","",$no_s_size));
+				$no_s_cNs = $no_s_color.$no_s_size;
+				if($selected_no_s_cNs == $no_s_cNs)
+				{
+					$selected_quantity = $selected_quantity+$row['order_count'];
+					$arr_del_cart_uid[] = $row['cart_uid'];
+				}
+			}
+			$sql->closeCursor();
+		}
+		$query = "LOCK TABLES {$goods_db}.{$cart_tb} WRITE";
+		if($is_yes_print>0) $q_start_time=time();
+		$dbconn->query($query);
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$query = "SELECT MIN(cart_uid) AS cart_uid FROM {$goods_db}.{$cart_tb}";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->query($query);
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$row = $sql->fetch(PDO::FETCH_ASSOC);
+		$sql->closeCursor();
+		if($row['cart_uid'])
+		{
+			$cart_uid = $row['cart_uid']-1;
+		}
+		else
+		{
+			$cart_uid = 4294967295;
+		}
+		$cp_uid = 1;
+		$uid = 0;
+		$check_cp_used = 0;
+		$expire_time = date("Y-m-d H:i:s");
+		$query = "INSERT INTO {$goods_db}.{$cart_tb} (cart_uid, m_uid, g_uid, order_count, g_option, g_color, cp_uid, uid, check_cp_used, is_economy, is_m, expire_time) VALUES ({$cart_uid}, {$_MEMBER['m_uid']}, {$g_uid}, {$selected_quantity}, '{$selected_size_str}', '{$selected_color_str}', {$cp_uid}, {$uid}, {$check_cp_used}, 0, 1, '{$expire_time}')";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$arr_mysql_err = $sql->errorInfo();
+		$mysql_errno = (int) $arr_mysql_err['1'];
+		unset($arr_mysql_err);
+		if($mysql_errno != '0')
+		{
+			$is_no_err = 0;
+			$result_num = -44;
+		}
+		else
+		{
+			$arr_cart_insert['c_uid'] = $cart_uid;
+		}
+		$dbconn->query("UNLOCK TABLES");
+		if($is_yes_print>0) 
+		{
+			echo "arr_del_cart_uid=";
+			echo("<pre>");print_r($arr_del_cart_uid);echo("</pre>");
+		}
+		if(count($arr_del_cart_uid)>0 && $is_no_err>0)
+		{
+			$query = "DELETE FROM {$goods_db}.{$cart_tb} WHERE cart_uid IN (".implode(",",$arr_del_cart_uid).") AND m_uid={$_MEMBER['m_uid']}";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql = $dbconn->prepare($query);
+			$sql->execute();
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		}
+		unset($arr_del_cart_uid);
+		$is_select_t_cart_count = 1;
+	}//end if($c_type == 'insert')
+	else if($c_type == 'update')
+	{
+		$query = "SELECT cart_uid FROM {$goods_db}.{$cart_tb} WHERE cart_uid={$c_uid} AND m_uid={$_MEMBER['m_uid']}";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$update_cart_uid = 0;
+		if(isset($sql))
+		{
+			$row = $sql->fetch(PDO::FETCH_ASSOC);
+			$update_cart_uid = $row['cart_uid'];
+			$sql->closeCursor();
+		}
+		if($update_cart_uid < 1)
+		{
+			$is_no_err = 0;
+			$result_num = -34;
+		}
+		else
+		{
+			$query = "UPDATE {$goods_db}.{$cart_tb} SET order_count={$selected_quantity}, g_option='{$selected_size_str}', g_color='{$selected_color_str}' WHERE cart_uid={$update_cart_uid} AND m_uid={$_MEMBER['m_uid']}";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql = $dbconn->prepare($query);
+			$sql->execute();
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+			$arr_mysql_err = $sql->errorInfo();
+			$mysql_errno = (int) $arr_mysql_err['1'];
+			unset($arr_mysql_err);
+			if($mysql_errno != '0')
+			{
+				$is_no_err = 0;
+				$result_num = -44;
+			}
+		}
+		$is_select_t_cart_count = 1;
+	}//end else if($c_type == 'update')
+	else if($c_type == 'sel_del')
+	{
+		$arr_sel_c_uid = explode(":", $sel_c_uid);//원래 , 이값으로 넘겼는데 str_filter 함수에서 , -> : 변환하였음.
+		$arr_new_sel_c_uid = array();
+		foreach($arr_sel_c_uid AS $c_uid)
+		{
+			$c_uid = @trim($c_uid);
+			if(!$c_uid) continue;
+			$arr_new_sel_c_uid[] = $c_uid;
+		}
+		if(count($arr_new_sel_c_uid) > 0)
+		{
+			$query = "DELETE FROM {$goods_db}.{$cart_tb} WHERE cart_uid IN (".implode(",",$arr_new_sel_c_uid).") AND m_uid={$_MEMBER['m_uid']}";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql = $dbconn->prepare($query);
+			$sql->execute();
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+			$arr_mysql_err = $sql->errorInfo();
+			$mysql_errno = (int) $arr_mysql_err['1'];
+			unset($arr_mysql_err);
+			if($mysql_errno != '0')
+			{
+				$is_no_err = 0;
+				$result_num = -44;
+			}
+			else
+			{
+				$arr_del_c_uid = $arr_new_sel_c_uid;
+			}
+		}
+		unset($arr_new_sel_c_uid);
+		$is_select_t_cart_count = 1;
+	}//end else if($c_type == 'sel_del')
+	else if($c_type == 'all_del')
+	{
+		$query = "DELETE FROM {$goods_db}.{$cart_tb} WHERE m_uid={$_MEMBER['m_uid']}";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$arr_mysql_err = $sql->errorInfo();
+		$mysql_errno = (int) $arr_mysql_err['1'];
+		unset($arr_mysql_err);
+		if($mysql_errno != '0')
+		{
+			$is_no_err = 0;
+			$result_num = -44;
+		}
+		$t_cart_count = 0;
+	}//end else if($c_type == 'all_del')
+	
+	if($is_no_err>0 && $is_select_t_cart_count>0)
+	{
+		$query = "SELECT COUNT(*) AS t_cart_count FROM {$goods_db}.goods G, {$goods_db}.{$cart_tb} GC WHERE G.g_uid=GC.g_uid AND GC.m_uid={$_MEMBER['m_uid']}";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->query($query);
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		if(isset($sql))
+		{
+			$row = $sql->fetch(PDO::FETCH_ASSOC);
+			$sql->closeCursor();
+			$t_cart_count = $row['t_cart_count'];
+			if($t_cart_count > $MAX_CART_NUM)//$MAX_CART_NUM assign COMM_FUNC.inc
+			{	
+				$t_cart_count = $MAX_CART_NUM;
+				$over_t_num = $row['t_cart_count'];
+				if(!$over_t_num) $over_t_num=0;
+				$query = "INSERT INTO {$goods_db}.cart_wish_max_over_info (uid, m_uid, del_tb, t_num, update_time) VALUES (NULL, {$_MEMBER['m_uid']}, '{$cart_tb}', {$over_t_num}, now())";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->prepare($query);
+				$sql->execute();
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+			}
+		}
+	}
+	dbPDOClose($goods_db,$goods_host);
+	setcookie("CART_N", $t_cart_count, 0, "/", "buyfine.net");
+}
+unset($arr_req_data);
+if($is_yes_print>0) 
+{
+	echo "arr_query_runtime=";
+	echo("<pre>");print_r($arr_query_runtime);echo("</pre>");
+	unset($arr_query_runtime);
+}
+
+$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+if($c_type == 'insert')
+{
+	if(!$arr_cart_insert['c_uid']) $arr_cart_insert['c_uid']=0;
+	$arr_result = array(
+		'result'=>$result_num,
+		'message'=>$message,
+		'c_uid'=>$arr_cart_insert['c_uid'],
+		'total_items'=>$t_cart_count
+	);
+}
+else if($c_type=='sel_del')
+{
+	$arr_result = array(
+		'result'=>$result_num,
+		'message'=>$message,
+		#'list_del_c_id'=>$arr_del_c_uid,
+		'total_items'=>$t_cart_count
+	);
+}
+else if($c_type=='update' || $c_type=='all_del')
+{
+	$arr_result = array(
+		'result'=>$result_num,
+		'message'=>$message,
+		'total_items'=>$t_cart_count
+	);
+}
+unset($arr_cart_insert);
+unset($arr_del_c_uid);
+if($is_yes_print>1)
+{
+	echo "arr_result=";
+	echo("<pre>");print_r($arr_result);echo("</pre>");
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>

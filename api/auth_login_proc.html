@@ -1,0 +1,1500 @@
+<?
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+$is_cell_num_login_check = 1;
+$is_no_need_include = 0;
+if($_POST['is_no_inc'] > 0)
+{
+	$is_no_need_include = 1;
+	$is_cell_num_login_check = 0;
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+if($_POST['i_h_r'])
+{
+	$is_need_json_header = 0;
+}
+if(preg_match("/MicroMessenger/i", $_SERVER['HTTP_USER_AGENT']))
+{
+	if(preg_match("/wxmp.buyfine.net/i", $_SERVER['HTTP_HOST']))
+	{
+		$method = strtoupper($_SERVER["REQUEST_METHOD"]);
+		if($method != 'POST')
+		{
+			Header("Location:/main.html?istnc=1");
+			exit;
+			/*
+			echo("
+				<script>
+					alert('出现错误。- 如果继续出现错误请与管理者联系。');
+					location.href=\"/main.html?istnc=1\";
+				</script>
+			"); 
+			exit;
+			*/
+		}
+		else
+		{
+			if($_COOKIE['ud'])
+			{
+				Header("Location:/main.html?istnc=1");
+				exit;
+			}
+		}
+	}
+}
+if($is_no_need_include < 1)
+{
+	$IS_NO_NEED_MP_JS_CHECK = 1;
+	if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+	if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+	if(!$INCLUDE_COMM) include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+	if(!$IS_FUNC_CORE) include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+	if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+}
+
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+
+$is_no_err = 1;
+$result_num = 0;
+
+if($is_no_need_include>0 && $_POST['id'] && $_POST['pwd'])
+{
+	$arr_req_data['id'] = $_POST['id'];
+	$arr_req_data['pwd'] = $_POST['pwd'];
+}
+else
+{
+	if($is_need_json_header < 1)
+	{
+		$is_no_need_compare_sign_key = 1;
+	}
+	if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+}
+
+$confirm_msg = "";
+$t_m_uri = "";
+$vip_level_str = "";
+$available_mileage = 0;
+$t_a_coupon_count = 0;
+$t_cart_count = 0;
+$t_wish_count = 0;
+$t_ship_count = 0;
+$arr_member_info = array();
+$id = "";
+$pwd = "";
+$err_id = "";
+if($is_no_err > 0)
+{
+	if($arr_req_data['id'])
+	{
+		$id = @trim($arr_req_data['id']);
+	}
+	if($arr_req_data['pwd'])
+	{
+		$pwd = @trim($arr_req_data['pwd']);
+	}
+}
+if($is_no_err>0 && !$id)
+{
+	$is_no_err = 0;
+	$result_num = -10;
+	$err_id = "email";
+}
+if($is_no_err>0 && !$pwd)
+{
+	$is_no_err = 0;
+	$result_num = -11;
+	$err_id = "passwd";
+}
+$is_not_login_email = 0;
+if($is_no_err > 0)
+{
+	if(count($ARR_BF_NOT_LOGIN_EMAIL) > 0)//$ARR_BF_NOT_LOGIN_EMAIL assign COMM_FUNC.inc
+	{
+		foreach($ARR_BF_NOT_LOGIN_EMAIL AS $not_login_email)
+		{
+			if(preg_match("/".$not_login_email."/i", $id))
+			{
+				$is_not_login_email = 1;
+				break;
+			}
+		}
+	}
+	if($is_not_login_email == 1)
+	{
+		$is_no_err = 0;
+		$result_num = -12;
+	}
+}
+
+$is_already_cookie = 0;
+if($_COOKIE['ud'])
+{
+	/*
+	$is_no_err = 0;
+	$result_num = -9;
+	*/
+	$is_already_cookie = 1;
+}
+if($is_yes_print>0) 
+{
+	echo "is_already_cookie = {$is_already_cookie}<br />";
+}
+$star_is_born = 0;
+$is_star = 0;
+if($is_no_err > 0)
+{
+	$parent_m_uid = 0;
+	$parent_cms_uid = 0;
+	$db_parent_r_time = "";
+	$my_cms_uid = 0;
+	$isAvailable = 1;
+	$cp_now_month_str = date("Y-m");
+	$dbconn = dbPDOConn($member_db,$member_host);
+	
+	/* cell phone login check start */
+	if($is_cell_num_login_check > 0)
+	{
+		$isCellLoginTrue = "T";
+		$check_cell_login = @trim(func_str_no_space($id, 2));
+		$check_cell_char = preg_match("/[^[:digit:]]/", $check_cell_login);
+		if($check_cell_char)
+		{
+			$isCellLoginTrue = "F";
+		}
+		if($isCellLoginTrue === "T")
+		{
+			$first_cell_str = substr($check_cell_login,0,1);
+			if($first_cell_str != '1')
+			{
+				$isCellLoginTrue = "F";
+			}
+		}
+		if($isCellLoginTrue === "T")
+		{
+			$cell_check_len = strlen($check_cell_login);
+			if($cell_check_len != 11)
+			{
+				$isCellLoginTrue = "F";
+			}
+		}
+		if($isCellLoginTrue === "T")
+		{
+			if($ARR_BF_STATIC_CELL_LOGIN_INFO[$id]['email'])//$ARR_BF_STATIC_CELL_LOGIN_INFO assign COMM_FUNC.inc
+			{
+				$id = $ARR_BF_STATIC_CELL_LOGIN_INFO[$id]['email'];
+			}
+			else
+			{
+				$query = "SELECT M.email FROM {$member_db}.member M, {$member_db}.member_info MI WHERE M.m_uid=MI.m_uid AND MI.cell='{$id}' ORDER BY M.m_uid ASC LIMIT 0, 1";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->prepare($query);
+				$sql->execute();
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				$row = $sql->fetch(PDO::FETCH_ASSOC);
+				$sql->closeCursor();
+				if($row['email'])
+				{
+					$id = $row['email'];
+				}
+			}
+		}
+	}
+	/* cell phone login check start */
+	
+	$query = "
+		SELECT
+			M.m_uid, M.email, M.nickname, M.passwd, M.isAvailable, M.member_sale_rate, M.m_level, M.regist_date,
+			MI.name, MI.is_no_mileage, MI.partner_member_uid, MI.zipcode, MI.state_code, MI.city_code, MI.address, MI.phone, MI.cell, MI.parent_m_uid, MI.parent_cms_uid, MI.parent_r_time, MI.cms_uid, MI.is_star, MI.star_r_time, MI.wx_openId, MI.mp_openId
+		FROM 
+			{$member_db}.member M, {$member_db}.member_info MI
+		WHERE M.m_uid=MI.m_uid
+		AND M.email='{$id}'
+	";
+	if($is_yes_print>0) $q_start_time=time();
+	$sql = $dbconn->prepare($query);
+	$sql->execute();
+	if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+	if(isset($sql))
+	{
+		$row = $sql->fetch(PDO::FETCH_ASSOC);
+		$m_uid = $row['m_uid'];
+		$email = strtolower($row['email']);
+		$nickname = $row['nickname'];
+		$passwd = strtolower(MD5D($row['passwd'], $md5_key));
+		$now_db_m_level = $row['m_level'];
+		$isAvailable = $row['isAvailable'];
+		$is_no_mileage = $row['is_no_mileage'];
+		$partner_member_uid = $row['partner_member_uid'];
+		$arr_regist_date = explode("-",$row['regist_date']);
+		$regist_date = str_replace("-",".",$row['regist_date']);
+		$email = strtolower(str_replace("＠","@",$email));
+		$parent_m_uid = $row['parent_m_uid'];
+		$parent_cms_uid = $row['parent_cms_uid'];
+		$db_parent_r_time = $row['parent_r_time'];
+		$my_cms_uid = $row['cms_uid'];
+		$is_star = $row['is_star'];
+		
+		$arr_member_info['id'] = $email;
+		if(!$row['name'])
+		{
+			$arr_name = explode("@", $email);
+			$row['name'] = $arr_name['0'];
+			unset($arr_name);
+		}
+		$arr_member_info['name'] = $row['name'];
+		$arr_member_info['zipcode'] = $row['zipcode'];
+		$arr_member_info['state_code'] = $row['state_code'];
+		$arr_member_info['city_code'] = $row['city_code'];
+		$arr_member_info['address'] = $row['address'];
+		$arr_member_info['phone_num'] = $row['phone'];
+		$arr_member_info['cell_num'] = $row['cell'];
+		
+		$id = strtolower(str_replace("＠","@",$id));
+		$pwd = strtolower($pwd);
+	}
+	$sql->closeCursor();
+	if(!$email || !$passwd || !$nickname || $id!=$email || $pwd!=$passwd)
+	{
+		dbPDOClose($member_db,$member_host);
+		$is_no_err = 0;
+		$result_num = -13;
+	}
+	else
+	{
+		if($isAvailable==-1 || !$m_uid)
+		{
+			dbPDOClose($member_db,$member_host);
+			$is_no_err = 0;
+			$result_num = -14;
+		}
+		else
+		{
+			$result_num = 1;
+			
+			//WX Official wx_openId AND mp_openId check start 
+			$arr_mi_update_set = array();
+			$arr_wx_update_set = array();
+			if($_COOKIE['WX_T_UID'] && $IS_WX_JS_SDK>0)
+			{
+				$wx_temp_uid = str_filter($_COOKIE['WX_T_UID']);
+				$query_wx = "SELECT wx_openId, m_uid FROM {$member_db}.wechat_openid WHERE wx_temp_uid={$wx_temp_uid}";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql_wx = $dbconn->prepare($query_wx);
+				$sql_wx->execute();
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query_wx);//get_query_runtime assign COMM_FUNC.inc
+				$row_wx = $sql_wx->fetch(PDO::FETCH_ASSOC);
+				$sql_wx->closeCursor();
+				if($row_wx['wx_openId'] != $row['mp_openId'])
+				{
+					$arr_mi_update_set[] = "wx_openId='{$row_wx['wx_openId']}'";
+				}
+				if($row_wx['m_uid'] != $m_uid)
+				{
+					$query_wx = "UPDATE {$member_db}.wechat_openid SET m_uid={$m_uid} WHERE wx_temp_uid={$wx_temp_uid}";
+					if($is_yes_print>0) $q_start_time=time();
+					$dbconn->query($query_wx);
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query_wx);//get_query_runtime assign COMM_FUNC.inc
+				}
+			}
+			$wx_star_r_time = "0000-00-00 00:00:00";
+			if($is_wxmp_webview>0 && $_COOKIE['MP_T_UID'] && $IS_WX_JS_SDK>0)
+			{
+				if($IS_USE_WXMP_ID_ENCODE > 0)//$IS_USE_WXMP_ID_ENCODE assign /inc/config.inc
+				{
+					$mp_temp_uid = str_filter(MD5D($_COOKIE['MP_T_UID'], $WXMP_MD5_KEY, $WXMP_MD5_IV_LEN, $WXMP_MD5_EN_LEN));//$WXMP_MD5_KEY, $WXMP_MD5_IV_LEN, $WXMP_MD5_EN_LEN assign /inc/config.inc			
+				}
+				else
+				{
+					$mp_temp_uid = str_filter($_COOKIE['MP_T_UID']);
+				}
+				if($mp_temp_uid)
+				{
+					$query_mp = "SELECT mp_openId, m_uid, cms_uid, is_star, star_r_time, parent_list_cms_uid, first_parent_cms_uid_r_time FROM {$member_db}.wxmp_openid WHERE mp_temp_uid={$mp_temp_uid}";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql_mp = $dbconn->prepare($query_mp);
+					$sql_mp->execute();
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query_mp);//get_query_runtime assign COMM_FUNC.inc
+					$row_mp = $sql_mp->fetch(PDO::FETCH_ASSOC);
+					$sql_mp->closeCursor();
+					if($row_mp['m_uid'] != $m_uid)
+					{
+						$arr_wx_update_set[] = "m_uid={$m_uid}";
+					}
+					if($row_mp['mp_openId'] != $row['mp_openId'])
+					{
+						$arr_mi_update_set[] = "mp_openId='{$row_mp['mp_openId']}'";
+					}
+					$mp_parent_cms_uid =0;
+					if($row_mp['parent_list_cms_uid'])
+					{
+						$arr_temp_parent_cms_uid = explode(",",$row_mp['parent_list_cms_uid']);
+						$temp_parent_cms_uid = floatval(str_filter($arr_temp_parent_cms_uid['0']));//mysql int(11) MAX=4294967295, int(10) MAX=2147483647 -  intval로처리하면 MAX값이 2147483647이걸로 처리됨
+						if($temp_parent_cms_uid > 0)
+						{
+							$mp_parent_cms_uid = $temp_parent_cms_uid;
+						}
+						unset($arr_temp_parent_cms_uid);
+					}
+					if($mp_parent_cms_uid>0 && $mp_parent_cms_uid!=$parent_cms_uid)
+					{
+						$arr_mi_update_set[] = "parent_cms_uid={$mp_parent_cms_uid}, parent_r_time='{$row_mp['first_parent_cms_uid_r_time']}'";
+						$parent_cms_uid = $mp_parent_cms_uid;
+					}
+					else if(!$db_parent_r_time || $db_parent_r_time=='0000-00-00 00:00:00')
+					{
+						if($row_mp['first_parent_cms_uid_r_time'] && $row_mp['first_parent_cms_uid_r_time']!='0000-00-00 00:00:00')
+						{
+							$arr_mi_update_set[] = "parent_r_time='{$row_mp['first_parent_cms_uid_r_time']}'";
+						}
+					}
+					$wx_star_r_time = $row_mp['star_r_time'];
+					if($row_mp['cms_uid']>0 && $row_mp['cms_uid']!=$my_cms_uid)
+					{
+						$arr_mi_update_set[] = "cms_uid={$row_mp['cms_uid']}";
+						$my_cms_uid = $row_mp['cms_uid'];
+					}
+					else if($row_mp['cms_uid'] < 1)
+					{
+						$new_cms_uid = func_get_cms_uid($dbconn, 'pdo');
+						if($new_cms_uid > 0)
+						{
+							$arr_mi_update_set[] = "cms_uid={$new_cms_uid}";
+							$arr_wx_update_set[] = "cms_uid={$new_cms_uid}";
+							$my_cms_uid = $new_cms_uid;
+						}
+					}
+				}
+			}
+			//WX Official wx_openId AND mp_openId check end 
+			//star 조건 확인 start
+			if($my_cms_uid>0 && $SATR_FAN_NUM>0)
+			{
+				$arr_star_vars = array(
+					'cms_uid'=>$my_cms_uid,
+					'is_get_fan_ct'=>0,
+					'now_db_is_star'=>$is_star,
+					'm_uid'=>$m_uid,
+					'is_exist_table'=>0,
+					'dbconn'=>$dbconn,
+					'isPDO'=>1,
+					'is_yes_print'=>$is_yes_print
+				);
+				$arr_get_star = func_check_star($arr_star_vars);
+				unset($arr_star_vars);
+				if($arr_get_star['is_star'] > 0)
+				{
+					$star_r_time = "now()";
+					if($wx_star_r_time && $wx_star_r_time!='0000-00-00 00:00:00')
+					{
+						$star_r_time = "'".$wx_star_r_time."'";
+					}
+					if($is_star < 1)
+					{
+						$star_is_born = 1;
+						$is_star = 1;
+						$arr_mi_update_set[] = "is_star=1, star_r_time={$star_r_time}";
+					}
+					if($row_mp['is_star'] < 1)
+					{
+						$arr_wx_update_set[] = "is_star=1, star_r_time={$star_r_time}";
+					}
+				}
+				else
+				{
+					if($is_star > 0)
+					{
+						$arr_mi_update_set[] = "is_star=0";
+					}
+					if($row_mp['is_star'] > 0)
+					{
+						$arr_wx_update_set[] = "is_star=0";
+					}
+					$is_star = 0;
+				}
+				unset($arr_get_star);
+				/*
+$is_check_star = 1;
+				if($is_star>0 && in_array($m_uid, $ARR_EXCEPT_STAR_CHECK_FAN_NUM_M_UID))
+				{
+					$is_check_star = 0;
+				}
+				if($is_check_star > 0)
+				{
+					$arr_star_vars = array(
+						'cms_uid'=>$my_cms_uid,
+						'is_exist_table'=>0,
+						'dbconn'=>$dbconn,
+						'isPDO'=>1,
+						'is_yes_print'=>$is_yes_print
+					);
+					$arr_get_star = func_check_star($arr_star_vars);
+					unset($arr_star_vars);
+					if($arr_get_star['is_star'] > 0)
+					{
+						$star_r_time = "now()";
+						if($wx_star_r_time && $wx_star_r_time!='0000-00-00 00:00:00')
+						{
+							$star_r_time = "'".$wx_star_r_time."'";
+						}
+						if($is_star < 1)
+						{
+							$star_is_born = 1;
+							$is_star = 1;
+							$arr_mi_update_set[] = "is_star=1, star_r_time={$star_r_time}";
+						}
+						if($row_mp['is_star'] < 1)
+						{
+							$arr_wx_update_set[] = "is_star=1, star_r_time={$star_r_time}";
+						}
+					}
+					else
+					{
+						if($is_star > 0)
+						{
+							$arr_mi_update_set[] = "is_star=0";
+						}
+						if($row_mp['is_star'] > 0)
+						{
+							$arr_wx_update_set[] = "is_star=0";
+						}
+						$is_star = 0;
+					}
+					unset($arr_get_star);
+				}
+*/
+			}
+			//star 조건 확인 end
+			if(count($arr_wx_update_set) > 0)
+			{
+				$query_mp = "UPDATE {$member_db}.wxmp_openid SET ".implode(", ",$arr_wx_update_set)." WHERE mp_temp_uid={$mp_temp_uid}";
+				if($is_yes_print>0) $q_start_time=time();
+				$dbconn->query($query_mp);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query_mp);//get_query_runtime assign COMM_FUNC.inc
+			}
+			unset($arr_wx_update_set);
+			
+			//커미션 fan login_time N 회원가입여부 update start
+			if($parent_cms_uid>0 && $my_cms_uid>0)
+			{
+				$parent_fan_tail_num = $parent_cms_uid%$FAN_TB_TAIL_MODULO_NUM;//$FAN_TB_TAIL_MODULO_NUM assign COMM_FUNC.inc
+				$parent_fan_tb = "my_fan_".$parent_fan_tail_num;
+				$is_table = func_exist_table($parent_fan_tb, $fan_db, $dbconn, 1);//func_exist_table assign func_core.inc
+				if($is_table)
+				{
+					$query_fan = "UPDATE {$fan_db}.{$parent_fan_tb} SET last_login_time=now(), is_active=2 WHERE cms_uid={$parent_cms_uid} AND fan_cms_uid={$my_cms_uid}";
+					if($is_yes_print>0) $q_start_time=time();
+					$dbconn->query($query_fan);
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query_fan);//get_query_runtime assign COMM_FUNC.inc
+				}
+				if($parent_m_uid < 1)
+				{
+					$query_mi = "SELECT m_uid FROM {$member_db}.member_info WHERE cms_uid={$parent_cms_uid}";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql_mi = $dbconn->query($query_mi);
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query_mi);
+					if(isset($sql_mi))
+					{
+						$row_mi = $sql_mi->fetch(PDO::FETCH_ASSOC);
+						if($row_mi['m_uid'] > 0)
+						{
+							$arr_mi_update_set[] = "parent_m_uid={$row_mi['m_uid']}";
+						}
+						$sql_mi->closeCursor();
+					}
+				}
+			}
+			//커미션 fan login_time N 회원가입여부 update end
+			if(count($arr_mi_update_set) > 0)
+			{
+				$query_mi = "UPDATE {$member_db}.member_info SET ".implode(", ",$arr_mi_update_set)." WHERE m_uid={$m_uid}";
+				if($is_yes_print>0) $q_start_time=time();
+				$dbconn->query($query_mi);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query_mi);//get_query_runtime assign COMM_FUNC.inc
+			}
+			unset($arr_mi_update_set);
+			
+			$_MEMBER = array();
+			if($is_already_cookie > 0)
+			{
+				m_setCookie($_MEMBER);
+				$_MEMBER = array();
+			}
+			$_MEMBER['m_uid'] = $m_uid;
+			$_MEMBER['id'] = $row['email'];
+			$_MEMBER['nickname'] = $nickname;
+			if(!$row['name'])
+			{
+				$arr_m_email = explode("@",$row['email']);
+				$_MEMBER['name'] = $arr_m_email['0'];
+				unset($arr_m_email);
+			}
+			else
+			{
+				$_MEMBER['name'] = $row['name'];
+			}
+			$_MEMBER['member_sale_rate'] = $row['member_sale_rate'];
+			$_MEMBER['admin_level'] = 10;
+			$_MEMBER['cell_num'] = $arr_member_info['cell_num'];
+			$_MEMBER['cms_uid'] = $my_cms_uid;
+			//ob_start();
+			m_setCookie($_MEMBER);
+			
+			$max_wish_num = $MAX_WISH_NUM;//$MAX_WISH_NUM assign COMM_FUNC.inc
+			if($ARR_MAX_WISH_NUM_M_UID[$_MEMBER['m_uid']])//$ARR_MAX_WISH_NUM_M_UID assign COMM_FUNC.inc
+			{
+				$max_wish_num = $ARR_MAX_WISH_NUM_M_UID[$_MEMBER['m_uid']];
+			}
+			
+			//VIP LEVEL Start
+			if($is_wxmp_no_vip < 1)//$is_wxmp_no_vip assign /inc/config.inc
+			{
+				// $VIP_A_FEW_DAYS_AGO assign COMM_FUNC.inc
+				if(in_array($_MEMBER['m_uid'],$ARR_VVIP_M_UID)) // $ARR_VVIP_M_UID assign COMM_FUNC.inc
+				{
+					$start_vip_mktime = mktime (date("H"), date("i"), date("s"), date("m"), date("d")-$VVIP_A_FEW_DAYS_AGO,  date("Y"));
+				}
+				else
+				{
+					$start_vip_mktime = mktime (date("H"), date("i"), date("s"), date("m"), date("d")-$VIP_A_FEW_DAYS_AGO,  date("Y"));
+				}
+				$start_vip_date = date("Y-m-d",$start_vip_mktime);
+				$end_vip_date = date("Y-m-d");
+				$query_vip = "
+					SELECT 
+						SUM(P.discount_price) AS t_discount_price
+					FROM 
+						{$payment_db}.payment_v2 P
+					WHERE P.m_uid={$_MEMBER['m_uid']}
+					AND P.isAvailable=1
+					AND P.pa_status IN (2,3,4,5,6,7)
+					AND (P.order_time BETWEEN '{$start_vip_date} 00:00:00' AND '{$end_vip_date} 23:59:59')
+				";
+				
+				$query_vip2 = "
+					SELECT 
+						SUM(PE.order_count) AS order_count, SUM(CEIL(PE.t_price-PE.t_price_minus)) AS each_t_price, SUM(PE.etc_discount_price) AS etc_discount_price
+					FROM 
+						{$payment_db}.payment_v2 P, {$payment_db}.payment_v2_each PE
+					WHERE PE.pa_uid=P.pa_uid
+					AND P.m_uid={$_MEMBER['m_uid']}
+					AND P.isAvailable=1
+					AND PE.pa_status IN (2,3,4,5,6,7)
+					AND (P.order_time BETWEEN '{$start_vip_date} 00:00:00' AND '{$end_vip_date} 23:59:59')
+				";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql_vip = $dbconn->query($query_vip);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query_vip);//get_query_runtime assign COMM_FUNC.inc
+				if($is_yes_print>0) $q_start_time=time();
+				$sql_vip2 = $dbconn->query($query_vip2);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query_vip2);//get_query_runtime assign COMM_FUNC.inc
+				unset($query_vip);
+				unset($query_vip2);
+				
+				if(isset($sql_vip)) $row_vip=$sql_vip->fetch(PDO::FETCH_ASSOC);
+				if(isset($sql_vip2)) $row_vip2=$sql_vip2->fetch(PDO::FETCH_ASSOC);
+				
+				if(!$row_vip['t_discount_price']) $row_vip['t_discount_price']=0;
+				if(!$row_vip2['order_count']) $row_vip2['order_count']=0;
+				if(!$row_vip2['each_t_price']) $row_vip2['each_t_price']=0;
+				if(!$row_vip2['etc_discount_price']) $row_vip2['etc_discount_price']=0;
+				
+				$t_order_count = $row_vip2['order_count'];
+				$t_r_sales = $row_vip2['each_t_price']-$row_vip2['etc_discount_price']-$row_vip['t_discount_price'];
+				
+				$sql_vip->closeCursor();
+				$sql_vip2->closeCursor();
+				
+				$arr_vip_level = get_vip_level($t_r_sales, $t_order_count);
+				if($is_yes_print>0 && $_MEMBER['m_uid']=='1')
+				{
+					echo "arr_vip_level=";
+					echo("<pre>");print_r($arr_vip_level);echo("</pre>");
+				}
+				$m_level = $arr_vip_level['m_level'];
+				if($m_level != $now_db_m_level)
+				{
+					$query_vip = "UPDATE {$member_db}.member SET m_level={$m_level} WHERE m_uid={$_MEMBER['m_uid']}";
+					if($is_yes_print>0) $q_start_time=time();
+					$dbconn->query($query_vip);
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query_vip);//get_query_runtime assign COMM_FUNC.inc
+				}
+				$vip_level_str = $ARR_VIP_TYPE_EN[$m_level]." / ".$ARR_VIP_TYPE_CN[$m_level]; // $ARR_VIP_TYPE_CN assign COMM_FUNC.inc
+			}
+			//VIP LEVEL End
+			
+			//Login Log
+			$now_date_str = date("Y-m-d");
+			/* 16.04.18 부터 로그인 카운트 처리하지 않음.
+			$sql_log = $dbconn->query("SELECT date_uid,date_str FROM {$log_db}.date_now_uid WHERE uid=1");
+			$row_log = $sql_log->fetch(PDO::FETCH_ASSOC);
+			if($row_log['date_str'] == $now_date_str)
+			{
+				$date_uid = $row_log['date_uid'];
+			}
+			else
+			{
+				$dbconn->query("INSERT INTO {$log_db}.date_uid (date_uid,date_str) VALUES (NULL,'{$now_date_str}')");
+				$date_uid = $dbconn->lastInsertId();
+				$dbconn->query("UPDATE {$log_db}.date_now_uid SET date_uid={$date_uid}, date_str='{$now_date_str}' WHERE uid=1");
+			}
+			$sql_log->closeCursor();
+			$sql_log4 = $dbconn->query("UPDATE {$log_db}.count_log SET login_count=login_count+1 WHERE m_uid={$_MEMBER['m_uid']} AND date_uid={$date_uid}");
+			$update_login_count = $sql_log4->rowCount();
+			if($update_login_count < 1)
+			{
+				$dbconn->query("INSERT INTO {$log_db}.count_log (m_uid,login_count,date_uid) VALUES ({$_MEMBER['m_uid']},1,{$date_uid})");
+			}
+			*/
+			
+			if($_MEMBER['m_uid'])
+			{
+				/* 16.04.18 부터 로그인 카운트 처리하지 않음.
+				$sql_log9 = $dbconn->query("SELECT SUM(login_count) AS t_login_count FROM {$log_db}.count_log WHERE m_uid={$_MEMBER['m_uid']}");
+				$row_log9 = $sql_log9->fetch(PDO::FETCH_ASSOC);
+				$sql_log9->closeCursor();
+				setcookie("LC", $row_log9['t_login_count'], 0, "/", ".buyfine.net");
+				*/
+				setcookie("RD", $regist_date, 0, "/", ".buyfine.net");
+				if($is_wxmp_no_vip < 1)//$is_wxmp_no_vip assign /inc/config.inc
+				{
+					setcookie("VMLS", $vip_level_str, 0, "/", ".buyfine.net");
+					setcookie("VML", $m_level, 0, "/", ".buyfine.net");
+				}
+				setcookie("BFLNUM", "1", 0, "/", ".buyfine.net");
+				setcookie("BFUSERNAME", $_MEMBER['name'], 0, "/", ".buyfine.net");
+				setcookie('BFUSERID', $_MEMBER['id'], time()+60*60*24*730, '/', '.buyfine.net');
+				setcookie("BFPTNUM", $partner_member_uid, 0, "/", ".buyfine.net");
+				if($is_no_mileage > 0)
+				{
+					setcookie("BFINM", $_MEMBER['m_uid'], 0, "/", ".buyfine.net");
+				}
+				else
+				{
+					setcookie("BFINM", "", 0, "/", ".buyfine.net");
+				}
+				if($star_is_born > 0)
+				{
+					setcookie("STAR_IS_BORN", 1, 0, "/", ".buyfine.net");
+				}
+				if($is_wxmp_webview > 0)
+				{
+					//$encode_m_uid = MD5E($_MEMBER['m_uid'], $WXMP_MD5_KEY, $WXMP_MD5_IV_LEN, $WXMP_MD5_IV_TYPE, $WXMP_MD5_EN_LEN);//$WXMP_MD5_KEY, $WXMP_MD5_IV_LEN, $WXMP_MD5_IV_TYPE, $WXMP_MD5_EN_LEN assign /inc/config.inc
+					//setcookie("EMD", $encode_m_uid, 0, "/", ".buyfine.net");
+				}
+				
+				/* 			 
+				11.11 Event Coupon Check Start
+				1000-100 1张			11421
+				2000-200 1张			11422
+				3000-300 1张			11423
+				5000-500 1张			11424
+				10000-1000 1张		11425
+				*/
+				$nov_11_cp_end_date = "2020-06-30";
+				//if($now_date_str=='2017-11-11')
+				if($now_date_str <= $nov_11_cp_end_date)//buyfine 10주년 쿠폰 start
+				{
+					$cp_11_uid = 11685;
+					$cp_11_expire_time = "2020-06-30 23:59:59";
+					$sql_cp = $dbconn->query("SELECT COUNT(*) AS cp_count FROM {$payment_db}.a_coupon_member WHERE m_uid={$_MEMBER['m_uid']} AND cp_uid={$cp_11_uid}");
+					$row_cp = $sql_cp->fetch(PDO::FETCH_ASSOC);
+					$sql_cp->closeCursor();
+					if($row_cp['cp_count'] > 0)
+					{
+					}
+					else
+					{
+						$dbconn->query("INSERT INTO {$payment_db}.a_coupon_some_member (cp_uid, m_uid) VALUES ({$cp_11_uid}, {$_MEMBER['m_uid']})");
+						$dbconn->query("INSERT INTO {$payment_db}.a_coupon_member (m_uid, cp_uid, expire_time) VALUES ({$_MEMBER['m_uid']}, {$cp_11_uid}, '{$cp_11_expire_time}')");
+					}
+				}//buyfine 10주년 쿠폰 end
+				/*
+				if($now_date_str <= $nov_11_cp_end_date)
+				{
+					$arr_11_cp_uid = array(11421,11422,11423,11424,11425);
+					$cp_11_expire_time = "2018-11-12 23:59:59";
+					$sql_cp = $dbconn->query("SELECT COUNT(*) AS cp_count FROM {$payment_db}.a_coupon_member WHERE m_uid={$_MEMBER['m_uid']} AND cp_uid IN (".implode(",",$arr_11_cp_uid).")");
+					$row_cp = $sql_cp->fetch(PDO::FETCH_ASSOC);
+					$sql_cp->closeCursor();
+					if($row_cp['cp_count'] > 0)
+					{
+					}
+					else
+					{
+						foreach($arr_11_cp_uid AS $cp_11_uid)
+						{
+							$dbconn->query("INSERT INTO {$payment_db}.a_coupon_some_member (cp_uid, m_uid) VALUES ({$cp_11_uid}, {$_MEMBER['m_uid']})");
+							$dbconn->query("INSERT INTO {$payment_db}.a_coupon_member (m_uid, cp_uid, expire_time) VALUES ({$_MEMBER['m_uid']}, {$cp_11_uid}, '{$cp_11_expire_time}')");
+						}
+					}
+				}
+				*/
+				/* 11.11 Event Coupon Check End*/
+				
+				$BF_NAM = $_COOKIE['BF_NAM'];
+				/*No Auth Cart AND Wish AND TV Like AND TV Play AND TV Save watch Start*/
+				if($_COOKIE['BF_V3_T_M'] && !$BF_NAM)
+				{
+					$query = "LOCK TABLES {$goods_db}.no_auth_temp_m_uid WRITE";
+					if($is_yes_print>0) 
+					{
+						$q_start_time=time();
+						$arr_query_str = array();
+						$arr_query_str[] = $query;
+					}
+					$dbconn->query($query);
+					$query = "SELECT MAX(no_auth_m_uid) AS no_auth_m_uid FROM {$goods_db}.no_auth_temp_m_uid";
+					if($is_yes_print>0) $arr_query_str[]=$query;
+					$sql = $dbconn->query($query);
+					$row = $sql->fetch(PDO::FETCH_ASSOC);
+					$sql->closeCursor();
+					if($row['no_auth_m_uid'])
+					{
+						$no_auth_m_uid = $row['no_auth_m_uid']+1;
+					}
+					else
+					{
+						$no_auth_m_uid = 1;
+					}
+					$query = "INSERT INTO {$goods_db}.no_auth_temp_m_uid (no_auth_m_uid) VALUES ({$no_auth_m_uid})";
+					if($is_yes_print>0) $arr_query_str[]=$query;
+					$dbconn->query($query);
+					$query = "UNLOCK TABLES";
+					if($is_yes_print>0) $arr_query_str[]=$query;
+					$dbconn->query($query);
+					if($_COOKIE['BF_V3_T_M'])
+					{
+						$tc_m_uid = $_COOKIE['BF_V3_T_M'];
+						$query = "UPDATE {$goods_db}.goods_cart_no_auth SET m_uid={$no_auth_m_uid} WHERE m_uid={$tc_m_uid}";
+						if($is_yes_print>0) $arr_query_str[]=$query;
+						$dbconn->query($query);
+						//setcookie('BF_V3_T_M', '', 0, '/', '.buyfine.net');
+					}
+					if($is_yes_print>0) 
+					{
+						$query_str = implode("<br />",$arr_query_str);
+						get_query_runtime($q_start_time,$query_str);//get_query_runtime assign COMM_FUNC.inc
+						unset($arr_query_str);
+						unset($query_str);
+					}
+					setcookie('BF_NAM', $no_auth_m_uid, time()+60*60*24*730, '/', '.buyfine.net');
+					$BF_NAM = $no_auth_m_uid;
+				}
+				if($is_yes_print>0) 
+				{
+					echo "n_a_m = {$BF_NAM}<br />";
+				}
+				if($BF_NAM)
+				{
+					/*No Auth Cart Start*/
+					$query = "SELECT cart_uid, g_uid, order_count, g_option, g_color FROM {$goods_db}.goods_cart_no_auth WHERE m_uid={$BF_NAM}";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql = $dbconn->prepare($query);
+					$sql->execute();
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+					$arr_cart_info = array();
+					$arr_g_uid = array();
+					$arr_del_cart_uid = array();
+					if(isset($sql))
+					{	
+						while($row=$sql->fetch(PDO::FETCH_ASSOC))
+						{
+							$no_s_color = strtolower(func_tmall_str_no_space($row['g_color'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+							$no_s_size = strtolower(func_str_no_space($row['g_option'], 2));
+							$no_s_size = @trim(str_ireplace("-PRE-ORDER","",$no_s_size));
+							$no_s_cNs = $no_s_color.$no_s_size;
+							$cart_qty = $row['order_count'];
+							if(count($arr_cart_info[$row['g_uid']][$no_s_cNs]) > 0)
+							{
+								$cart_qty = $arr_cart_info[$row['g_uid']][$no_s_cNs]['qty']+$row['order_count'];
+							}
+							$arr_g_uid[] = $row['g_uid'];
+							$arr_cart_info[$row['g_uid']][$no_s_cNs]['color'] = $row['g_color'];
+							$arr_cart_info[$row['g_uid']][$no_s_cNs]['size'] = $row['g_option'];
+							$arr_cart_info[$row['g_uid']][$no_s_cNs]['qty'] = $cart_qty;
+						}
+						$sql->closeCursor();
+					}
+					if(count($arr_g_uid)>1) $arr_g_uid=array_unique($arr_g_uid);
+					if(count($arr_g_uid) > 0)
+					{
+						$query = "
+							SELECT 
+								GC.cart_uid, GC.g_uid, GC.order_count, GC.g_option, GC.g_color
+							FROM
+								{$goods_db}.goods_cart GC
+							WHERE GC.g_uid IN (".implode(",",$arr_g_uid).") 
+							AND GC.m_uid={$_MEMBER['m_uid']}
+							ORDER BY GC.cart_uid
+							LIMIT 0, {$MAX_CART_NUM}
+						";//$MAX_CART_NUM assign COMM_FUNC.inc
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						if(isset($sql))
+						{
+							while($row=$sql->fetch(PDO::FETCH_ASSOC))
+							{
+								$no_s_color = strtolower(func_tmall_str_no_space($row['g_color'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+								$no_s_size = strtolower(func_str_no_space($row['g_option'], 2));
+								$no_s_size = @trim(str_ireplace("-PRE-ORDER","",$no_s_size));
+								$no_s_cNs = $no_s_color.$no_s_size;
+								if(count($arr_cart_info[$row['g_uid']][$no_s_cNs]) > 0)
+								{
+									$arr_cart_info[$row['g_uid']][$no_s_cNs]['qty'] = $arr_cart_info[$row['g_uid']][$no_s_cNs]['qty']+$row['order_count'];
+									$arr_del_cart_uid[] = $row['cart_uid'];
+								}
+							}
+							$sql->closeCursor();
+						}
+					}
+					unset($arr_g_uid);
+					if(count($arr_cart_info) > 0)
+					{
+						$query = "LOCK TABLES {$goods_db}.goods_cart WRITE";
+						if($is_yes_print>0) $q_start_time=time();
+						$dbconn->query($query);
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						$query = "SELECT MIN(cart_uid) AS cart_uid FROM {$goods_db}.goods_cart";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->query($query);
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						$row = $sql->fetch(PDO::FETCH_ASSOC);
+						$sql->closeCursor();
+						if($row['cart_uid'])
+						{
+							$cart_uid = $row['cart_uid']-1;
+						}
+						else
+						{
+							$cart_uid = 4294967295;
+						}
+						$cp_uid = 1;
+						$uid = 0;
+						$check_cp_used = 0;
+						$expire_time = date("Y-m-d H:i:s");
+						foreach($arr_cart_info AS $g_uid=>$arr_temp_cart_value)
+						{
+							foreach($arr_temp_cart_value AS $cns_key=>$arr_w_value)
+							{
+								$query = "INSERT INTO {$goods_db}.goods_cart (cart_uid, m_uid, g_uid, order_count, g_option, g_color, cp_uid, uid, check_cp_used, is_economy, is_m, expire_time) VALUES ({$cart_uid}, {$_MEMBER['m_uid']}, {$g_uid}, {$arr_w_value['qty']}, '{$arr_w_value['size']}', '{$arr_w_value['color']}', {$cp_uid}, {$uid}, {$check_cp_used}, 0, 1, '{$expire_time}')";
+								if($is_yes_print>0) $q_start_time=time();
+								$sql = $dbconn->prepare($query);
+								$sql->execute();
+								if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+								$arr_mysql_err = $sql->errorInfo();
+								$mysql_errno = (int) $arr_mysql_err['1'];
+								unset($arr_mysql_err);
+								if($mysql_errno != '0')
+								{
+									$is_no_err = 0;
+									$result_num = -44;
+								}
+								else
+								{
+									$cart_uid--;
+								}
+							}
+						}
+						$dbconn->query("UNLOCK TABLES");
+						
+						$query = "DELETE FROM {$goods_db}.goods_cart_no_auth WHERE m_uid={$BF_NAM}";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+					}
+					unset($arr_cart_info);
+					if(count($arr_del_cart_uid)>0 && $is_no_err>0)
+					{
+						$query = "DELETE FROM {$goods_db}.goods_cart WHERE cart_uid IN (".implode(",",$arr_del_cart_uid).") AND m_uid={$_MEMBER['m_uid']}";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+					}
+					unset($arr_del_cart_uid);
+					unset($query);
+					/*No Auth Cart End*/
+					/*No Auth Wish Start*/
+					$query = "SELECT wish_uid, g_uid, g_option, g_color, is_no_img, is_no_cns FROM {$goods_db}.goods_wish_list_no_auth WHERE m_uid={$BF_NAM}";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql = $dbconn->prepare($query);
+					$sql->execute();
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+					$arr_wish_info = array();
+					$arr_g_uid = array();
+					$arr_del_wish_uid = array();
+					if(isset($sql))
+					{	
+						while($row=$sql->fetch(PDO::FETCH_ASSOC))
+						{
+							$no_s_color = strtolower(func_tmall_str_no_space($row['g_color'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+							$no_s_size = strtolower(func_str_no_space($row['g_option'], 2));
+							$no_s_size = @trim(str_ireplace("-PRE-ORDER","",$no_s_size));
+							$no_s_cNs = $no_s_color.$no_s_size;
+							$arr_g_uid[] = $row['g_uid'];
+							$arr_wish_info[$row['g_uid']][$no_s_cNs]['color'] = $row['g_color'];
+							$arr_wish_info[$row['g_uid']][$no_s_cNs]['size'] = $row['g_option'];
+							$arr_wish_info[$row['g_uid']][$no_s_cNs]['is_no_img'] = $row['is_no_img'];
+							$arr_wish_info[$row['g_uid']][$no_s_cNs]['is_no_cns'] = $row['is_no_cns'];
+						}
+						$sql->closeCursor();
+					}
+					if(count($arr_g_uid)>1) $arr_g_uid=array_unique($arr_g_uid);
+					if(count($arr_g_uid) > 0)
+					{
+						$query = "
+							SELECT 
+								GWL.wish_uid, GWL.g_uid, GWL.g_option, GWL.g_color, GWL.is_no_img, GWL.is_no_cns
+							FROM
+								{$goods_db}.goods_wish_list GWL
+							WHERE GWL.g_uid IN (".implode(",",$arr_g_uid).") 
+							AND GWL.m_uid={$_MEMBER['m_uid']}
+							ORDER BY GWL.wish_uid
+							LIMIT 0, {$max_wish_num}
+						";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						if(isset($sql))
+						{
+							while($row=$sql->fetch(PDO::FETCH_ASSOC))
+							{
+								$no_s_color = strtolower(func_tmall_str_no_space($row['g_color'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+								$no_s_size = strtolower(func_str_no_space($row['g_option'], 2));
+								$no_s_size = @trim(str_ireplace("-PRE-ORDER","",$no_s_size));
+								$no_s_cNs = $no_s_color.$no_s_size;
+								if(count($arr_wish_info[$row['g_uid']][$no_s_cNs]) > 0)
+								{
+									$arr_del_wish_uid[] = $row['wish_uid'];
+								}
+							}
+							$sql->closeCursor();
+						}
+					}
+					unset($arr_g_uid);
+					if(count($arr_wish_info) > 0)
+					{
+						$query = "LOCK TABLES {$goods_db}.goods_wish_list WRITE";
+						if($is_yes_print>0) $q_start_time=time();
+						$dbconn->query($query);
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						$query = "SELECT MIN(wish_uid) AS wish_uid FROM {$goods_db}.goods_wish_list";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->query($query);
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						$row = $sql->fetch(PDO::FETCH_ASSOC);
+						$sql->closeCursor();
+						if($row['wish_uid'])
+						{
+							$wish_uid = $row['wish_uid']-1;
+						}
+						else
+						{
+							$wish_uid = 4294967295;
+						}
+						foreach($arr_wish_info AS $g_uid=>$arr_temp_wish_value)
+						{
+							foreach($arr_temp_wish_value AS $cns_key=>$arr_w_value)
+							{
+								$query = "INSERT INTO {$goods_db}.goods_wish_list (wish_uid, m_uid, g_uid, g_option, g_color, is_economy, is_no_img, is_no_cns, is_m) VALUES ({$wish_uid}, {$_MEMBER['m_uid']}, {$g_uid}, '{$arr_w_value['size']}', '{$arr_w_value['color']}', 0, {$arr_w_value['is_no_img']}, {$arr_w_value['is_no_cns']}, 1)";
+								if($is_yes_print>0) $q_start_time=time();
+								$sql = $dbconn->prepare($query);
+								$sql->execute();
+								if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+								$arr_mysql_err = $sql->errorInfo();
+								$mysql_errno = (int) $arr_mysql_err['1'];
+								unset($arr_mysql_err);
+								if($mysql_errno != '0')
+								{
+									$is_no_err = 0;
+									$result_num = -44;
+								}
+								else
+								{
+									$wish_uid--;
+								}
+							}
+						}
+						$dbconn->query("UNLOCK TABLES");
+						
+						$query = "DELETE FROM {$goods_db}.goods_wish_list_no_auth WHERE m_uid={$BF_NAM}";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+					}
+					unset($arr_wish_info);
+					if(count($arr_del_wish_uid)>0 && $is_no_err>0)
+					{
+						$query = "DELETE FROM {$goods_db}.goods_wish_list WHERE wish_uid IN (".implode(",",$arr_del_wish_uid).") AND m_uid={$_MEMBER['m_uid']}";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+					}
+					unset($arr_del_wish_uid);
+					unset($query);
+					/*No Auth Wish End*/
+					/*No Auth TV Play Start*/
+					$no_auth_tb_tail_num = $BF_NAM%$TV_PLAY_TB_TAIL_MODULO_NUM;
+					$tb_tail_num = $_MEMBER['m_uid']%$TV_PLAY_TB_TAIL_MODULO_NUM;
+					$query = "SELECT uid, vid, m_uid, last_play_sec, regist_time FROM {$tv_play_db}.play_vod_no_auth_{$no_auth_tb_tail_num} WHERE m_uid={$BF_NAM}";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql = $dbconn->prepare($query);
+					$sql->execute();
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+					$arr_tv_play_result_row = array();
+					if(isset($sql))
+					{	
+						while($row=$sql->fetch(PDO::FETCH_ASSOC))
+						{
+							$arr_tv_play_result_row[] = $row;
+						}
+						$sql->closeCursor();
+					}
+					if(count($arr_tv_play_result_row) > 0)
+					{
+						$is_table = func_exist_table("play_vod_".$tb_tail_num, $tv_play_db, $dbconn, 1);
+						if(!$is_table)
+						{
+							$query = "
+								CREATE TABLE IF NOT EXISTS {$tv_play_db}.play_vod_{$tb_tail_num} (
+								  uid int(10) unsigned NOT NULL DEFAULT '0',
+								  vid int(10) unsigned NOT NULL DEFAULT '0',
+								  m_uid int(11) unsigned NOT NULL DEFAULT '0',
+								  last_play_sec smallint(5) unsigned NOT NULL DEFAULT '0',
+								  regist_time datetime NOT NULL,
+								  PRIMARY KEY (uid),
+								  UNIQUE KEY vid (vid,m_uid),
+								  KEY m_uid (m_uid)
+								) ENGINE=InnoDB DEFAULT CHARSET=utf8
+							";
+							if($is_yes_print>0) $q_start_time=time();
+							func_case_dbconn_query($query,$dbconn,1);
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						}
+						$arr_del_tv_play_uid = array();
+						foreach($arr_tv_play_result_row AS $row)
+						{
+							$arr_del_tv_play_uid[] = $row['uid'];
+							$query = "INSERT INTO {$tv_play_db}._play_vod_all (uid, vid, m_uid, last_play_sec, tb_tail_num, regist_time) VALUES ({$row['uid']}, {$row['vid']}, {$_MEMBER['m_uid']}, {$row['last_play_sec']}, {$tb_tail_num}, '{$row['regist_time']}')";
+							if($is_yes_print>0) $q_start_time=time();
+							$sql = $dbconn->prepare($query);
+							$sql->execute();
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+							$query = "INSERT INTO {$tv_play_db}.play_vod_{$tb_tail_num} (uid, vid, m_uid, last_play_sec, regist_time) VALUES ({$row['uid']}, {$row['vid']}, {$_MEMBER['m_uid']}, {$row['last_play_sec']}, '{$row['regist_time']}')";
+							if($is_yes_print>0) $q_start_time=time();
+							$sql = $dbconn->prepare($query);
+							$sql->execute();
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+							$sql->closeCursor();
+						}
+						if(count($arr_del_tv_play_uid) > 0)
+						{
+							$dbconn->query("DELETE PVNA, PVANA FROM {$tv_play_db}.play_vod_no_auth_{$no_auth_tb_tail_num} PVNA, {$tv_play_db}._play_vod_all_no_auth PVANA WHERE PVNA.uid=PVANA.uid AND PVNA.uid IN (".implode(",",$arr_del_tv_play_uid).")");
+						}
+						unset($arr_del_tv_play_uid);
+					}
+					unset($arr_tv_play_result_row);
+					/*No Auth TV Play End*/
+					/*No Auth TV Like Start*/
+					$no_auth_tb_tail_num = $BF_NAM%$TV_LIKE_TB_TAIL_MODULO_NUM;
+					$tb_tail_num = $_MEMBER['m_uid']%$TV_LIKE_TB_TAIL_MODULO_NUM;
+					$query = "SELECT uid, vid, m_uid, is_like, regist_time FROM {$tv_like_db}.like_vod_no_auth_{$no_auth_tb_tail_num} WHERE m_uid={$BF_NAM}";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql = $dbconn->prepare($query);
+					$sql->execute();
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+					$arr_tv_like_result_row = array();
+					$arr_del_tv_like_uid = array();
+					$arr_del_tv_like_vid = array();
+					if(isset($sql))
+					{	
+						while($row=$sql->fetch(PDO::FETCH_ASSOC))
+						{
+							$arr_del_tv_like_uid[] = $row['uid'];
+							if($row['is_like'] > 1)
+							{
+								$arr_del_tv_like_vid[] = $row['vid'];
+								$arr_tv_like_result_row[] = $row;
+							}
+						}
+						$sql->closeCursor();
+					}
+					if(count($arr_tv_like_result_row) > 0)
+					{
+						$is_table = func_exist_table("like_vod_".$tb_tail_num, $tv_like_db, $dbconn, 1);
+						if(!$is_table)
+						{
+							$query = "
+								CREATE TABLE IF NOT EXISTS {$tv_like_db}.like_vod_{$tb_tail_num} (
+								  uid int(11) unsigned NOT NULL DEFAULT '0',
+								  vid int(11) unsigned NOT NULL DEFAULT '0',
+								  m_uid int(11) unsigned NOT NULL DEFAULT '0',
+								  is_like tinyint(1) unsigned NOT NULL DEFAULT '2',
+								  regist_time datetime NOT NULL,
+								  PRIMARY KEY (uid),
+								  UNIQUE KEY vid (vid,m_uid),
+								  KEY m_uid (m_uid),
+								  KEY is_like (is_like)
+								) ENGINE=InnoDB DEFAULT CHARSET=utf8
+							";
+							if($is_yes_print>0) $q_start_time=time();
+							func_case_dbconn_query($query,$dbconn,1);
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						}
+						if(count($arr_del_tv_like_vid) > 0)
+						{
+							$arr_del_tv_like_vid = array_unique($arr_del_tv_like_vid);
+							$dbconn->query("DELETE LV, LVA FROM {$tv_like_db}.like_vod_{$tb_tail_num} LV, {$tv_like_db}._like_vod_all LVA WHERE LV.uid=LVA.uid AND LV.vid IN (".implode(",",$arr_del_tv_like_vid).") AND LV.m_uid={$_MEMBER['m_uid']} AND LV.is_like=1");
+						}
+						foreach($arr_tv_like_result_row AS $row)
+						{
+							$query = "INSERT INTO {$tv_like_db}._like_vod_all (uid, vid, m_uid, is_like, tb_tail_num, regist_time) VALUES ({$row['uid']}, {$row['vid']}, {$_MEMBER['m_uid']}, {$row['is_like']}, {$tb_tail_num}, '{$row['regist_time']}')";
+							if($is_yes_print>0) $q_start_time=time();
+							$sql = $dbconn->prepare($query);
+							$sql->execute();
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+							$query = "INSERT INTO {$tv_like_db}.like_vod_{$tb_tail_num} (uid, vid, m_uid, is_like, regist_time) VALUES ({$row['uid']}, {$row['vid']}, {$_MEMBER['m_uid']}, {$row['is_like']}, '{$row['regist_time']}')";
+							if($is_yes_print>0) $q_start_time=time();
+							$sql = $dbconn->prepare($query);
+							$sql->execute();
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+							$sql->closeCursor();
+						}
+						if(count($arr_del_tv_like_uid) > 0)
+						{
+							$dbconn->query("DELETE LVNA, LVANA FROM {$tv_like_db}.like_vod_no_auth_{$no_auth_tb_tail_num} LVNA, {$tv_like_db}._like_vod_all_no_auth LVANA WHERE LVNA.uid=LVANA.uid AND LVNA.uid IN (".implode(",",$arr_del_tv_like_uid).")");
+						}
+					}
+					unset($arr_del_tv_like_uid);
+					unset($arr_del_tv_like_vid);
+					unset($arr_tv_like_result_row);
+					/*No Auth TV Like End*/
+					/*No Auth TV Save watch Start*/
+					$no_auth_tb_tail_num = $BF_NAM%$TV_SAVE_TB_TAIL_MODULO_NUM;
+					$tb_tail_num = $_MEMBER['m_uid']%$TV_SAVE_TB_TAIL_MODULO_NUM;
+					$query = "SELECT uid, vid, m_uid, is_save, regist_time FROM {$tv_save_db}.save_vod_no_auth_{$no_auth_tb_tail_num} WHERE m_uid={$BF_NAM}";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql = $dbconn->prepare($query);
+					$sql->execute();
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+					$arr_tv_save_result_row = array();
+					$arr_del_tv_save_uid = array();
+					$arr_del_tv_save_vid = array();
+					if(isset($sql))
+					{	
+						while($row=$sql->fetch(PDO::FETCH_ASSOC))
+						{
+							$arr_del_tv_save_uid[] = $row['uid'];
+							if($row['is_save'] > 1)
+							{
+								$arr_del_tv_save_vid[] = $row['vid'];
+								$arr_tv_save_result_row[] = $row;
+							}
+						}
+						$sql->closeCursor();
+					}
+					if(count($arr_tv_save_result_row) > 0)
+					{
+						$is_table = func_exist_table("save_vod_".$tb_tail_num, $tv_save_db, $dbconn, 1);
+						if(!$is_table)
+						{
+							$query = "
+								CREATE TABLE IF NOT EXISTS {$tv_save_db}.save_vod_{$tb_tail_num} (
+								  uid int(11) unsigned NOT NULL DEFAULT '0',
+								  vid int(11) unsigned NOT NULL DEFAULT '0',
+								  m_uid int(11) unsigned NOT NULL DEFAULT '0',
+								  is_save tinyint(1) unsigned NOT NULL DEFAULT '2',
+								  regist_time datetime NOT NULL,
+								  PRIMARY KEY (uid),
+								  UNIQUE KEY vid (vid,m_uid),
+								  KEY m_uid (m_uid),
+								  KEY is_save (is_save)
+								) ENGINE=InnoDB DEFAULT CHARSET=utf8
+							";
+							if($is_yes_print>0) $q_start_time=time();
+							func_case_dbconn_query($query,$dbconn,1);
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						}
+						if(count($arr_del_tv_save_vid) > 0)
+						{
+							$arr_del_tv_save_vid = array_unique($arr_del_tv_save_vid);
+							$dbconn->query("DELETE SV, SVA FROM {$tv_save_db}.save_vod_{$tb_tail_num} SV, {$tv_save_db}._save_vod_all SVA WHERE SV.uid=SVA.uid AND SV.vid IN (".implode(",",$arr_del_tv_save_vid).") AND SV.m_uid={$_MEMBER['m_uid']} AND SV.is_save=1");
+						}
+						foreach($arr_tv_save_result_row AS $row)
+						{
+							$query = "INSERT INTO {$tv_save_db}._save_vod_all (uid, vid, m_uid, is_save, tb_tail_num, regist_time) VALUES ({$row['uid']}, {$row['vid']}, {$_MEMBER['m_uid']}, {$row['is_save']}, {$tb_tail_num}, '{$row['regist_time']}')";
+							if($is_yes_print>0) $q_start_time=time();
+							$sql = $dbconn->prepare($query);
+							$sql->execute();
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+							$query = "INSERT INTO {$tv_save_db}.save_vod_{$tb_tail_num} (uid, vid, m_uid, is_save, regist_time) VALUES ({$row['uid']}, {$row['vid']}, {$_MEMBER['m_uid']}, {$row['is_save']}, '{$row['regist_time']}')";
+							if($is_yes_print>0) $q_start_time=time();
+							$sql = $dbconn->prepare($query);
+							$sql->execute();
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+							$sql->closeCursor();
+						}
+						if(count($arr_del_tv_save_uid) > 0)
+						{
+							$dbconn->query("DELETE SVNA, SVANA FROM {$tv_save_db}.save_vod_no_auth_{$no_auth_tb_tail_num} SVNA, {$tv_save_db}._save_vod_all_no_auth SVANA WHERE SVNA.uid=SVANA.uid AND SVNA.uid IN (".implode(",",$arr_del_tv_save_uid).")");
+						}
+					}
+					unset($arr_del_tv_save_uid);
+					unset($arr_del_tv_save_vid);
+					unset($arr_tv_save_result_row);
+					/*No Auth TV Save watch End*/
+				}
+				/*No Auth Cart AND Wish AND TV Like AND TV Play AND TV Save watch End*/
+				if($_COOKIE['BF_V3_T_M'])
+				{
+					$query_t_m = "SELECT uid, g_uid, n_code, g_title, seq_num FROM {$payment_db}.a_coupon_lucky_member_log WHERE temp_m_uid={$_COOKIE['BF_V3_T_M']} ORDER BY uid ASC";
+					if($is_yes_print>0) $q_start_time=time();
+					$sql_t_m = $dbconn->prepare($query_t_m);
+					$sql_t_m->execute();
+					if($is_yes_print>0) get_query_runtime($q_start_time,$query_t_m);//get_query_runtime assign COMM_FUNC.inc
+					$arr_del_t_m = array();
+					$arr_up_t_m_g_uid = array();
+					$return_t_m_g_uid = 0;
+					while($row_t_m=$sql_t_m->fetch(PDO::FETCH_ASSOC))
+					{
+						if($row_t_m['n_code']==2)
+						{
+							$arr_event_cp_month = array("2010-08");
+							if(in_array($cp_now_month_str,$arr_event_cp_month))
+							{
+								$lc_cp_uid = 74;
+							}
+							else
+							{
+								$lc_cp_uid = 2;
+							}
+						}
+						else
+						{
+							$lc_cp_uid = 2;
+						}
+						$loop_query = "INSERT INTO {$payment_db}.a_coupon_member (uid, m_uid, cp_uid, seq_num, g_uid, g_uid_2, g_title, expire_time) VALUES (NULL, {$_MEMBER['m_uid']}, {$lc_cp_uid}, {$row_t_m['seq_num']}, {$row_t_m['g_uid']}, {$row_t_m['g_uid']}, '{$row_t_m['g_title']}', (now()+INTERVAL 12 HOUR))";
+						if($is_yes_print>0) $q_start_time=time();
+						$dbconn->query($loop_query);
+						if($is_yes_print>0) get_query_runtime($q_start_time,$loop_query);//get_query_runtime assign COMM_FUNC.inc
+						$arr_del_t_m[] = $row_t_m['uid'];
+						$arr_up_t_m_g_uid[] = $row_t_m['g_uid'];
+						$return_t_m_g_uid = $row_t_m['g_uid'];
+					}
+					$sql_t_m->closeCursor();
+					$del_t_m_count = count($arr_del_t_m);
+					if($del_t_m_count > 0)
+					{
+						$in_up_t_m = implode(",", $arr_up_t_m_g_uid);
+						if($is_yes_print>0) $q_start_time=time();
+						$query = "UPDATE {$payment_db}.a_coupon_lucky_log SET isAvailable=0 WHERE temp_m_uid={$_COOKIE['BF_V3_T_M']} AND g_uid IN ({$in_up_t_m})";
+						$sql_t_m = $dbconn->prepare($query);
+						$sql_t_m->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						
+						$in_del_t_m = implode(",", $arr_del_t_m);
+						if($is_yes_print>0) $q_start_time=time();
+						$query = "DELETE FROM {$payment_db}.a_coupon_lucky_member_log WHERE uid IN ({$in_del_t_m})";
+						$dbconn->query($query);
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						if($return_t_m_g_uid > 0)
+						{
+							if($is_yes_print>0) $q_start_time=time();
+							$query_t_m = "SELECT isAvailable, isSoldout, n_code, c_value FROM {$goods_db}.goods WHERE g_uid={$return_t_m_g_uid}";
+							$sql_t_m = $dbconn->query($query_t_m);
+							if($is_yes_print>0) get_query_runtime($q_start_time,$query_t_m);//get_query_runtime assign COMM_FUNC.inc
+							$row_t_m = $sql_t_m->fetch(PDO::FETCH_ASSOC);
+							$sql_t_m->closeCursor();
+							if($row_t_m['isAvailable']==2 && $row_t_m['isSoldout']=='0')
+							{
+								$arr_parameter = func_ca_parameter($row_t_m['c_value']);
+								$parameter = implode("&",$arr_parameter);
+								//$t_m_uri = "/shop/goods_detail.html?pid={$return_t_m_g_uid}&n={$row_t_m['n_code']}&{$parameter}&lk=1";
+								$t_m_uri = "/member/coupon_list.html";
+								$confirm_msg = "您已获得本商品的优惠券，查看优惠券吗？";
+							}
+						}
+					}
+				}
+				
+				$query = "SELECT COUNT(*) AS t_cart_count FROM {$goods_db}.goods G, {$goods_db}.goods_cart GC WHERE G.g_uid=GC.g_uid AND GC.m_uid={$_MEMBER['m_uid']}";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				if(isset($sql))
+				{
+					$row = $sql->fetch(PDO::FETCH_ASSOC);
+					$sql->closeCursor();
+					$t_cart_count = $row['t_cart_count'];
+					if($t_cart_count > $MAX_CART_NUM)//$MAX_CART_NUM assign COMM_FUNC.inc
+					{	
+						$t_cart_count = $MAX_CART_NUM;
+						$over_t_num = $row['t_cart_count'];
+						if(!$over_t_num) $over_t_num=0;
+						$query = "INSERT INTO {$goods_db}.cart_wish_max_over_info (uid, m_uid, del_tb, t_num, update_time) VALUES (NULL, {$_MEMBER['m_uid']}, '{$cart_tb}', {$over_t_num}, now())";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+					}
+				}
+				
+				$query = "SELECT COUNT(*) AS t_wish_count FROM {$goods_db}.goods G, {$goods_db}.goods_wish_list GWL WHERE G.g_uid=GWL.g_uid AND GWL.m_uid={$_MEMBER['m_uid']}";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				if(isset($sql))
+				{
+					$row = $sql->fetch(PDO::FETCH_ASSOC);
+					$sql->closeCursor();
+					$t_wish_count = $row['t_wish_count'];
+					if($t_wish_count > $max_wish_num)
+					{	
+						$t_wish_count = $max_wish_num;
+						$over_t_num = $row['t_wish_count'];
+						if(!$over_t_num) $over_t_num=0;
+						$query = "INSERT INTO {$goods_db}.cart_wish_max_over_info (uid, m_uid, del_tb, t_num, update_time) VALUES (NULL, {$_MEMBER['m_uid']}, '{$wish_tb}', {$over_t_num}, now())";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+					}
+				}
+				
+				$query = "SELECT COUNT(DISTINCT(P.pa_uid)) AS s_ct FROM {$payment_db}.payment_v2 P, {$payment_db}.payment_v2_each PE WHERE P.pa_uid=PE.pa_uid AND P.m_uid={$_MEMBER['m_uid']} AND P.isAvailable=1 AND P.pa_status IN (4,5,6)";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+				if(isset($sql))
+				{
+					$row = $sql->fetch(PDO::FETCH_ASSOC);
+					$t_ship_count = $row['s_ct'];
+					$sql->closeCursor();
+				}
+				/*
+$query = "SELECT m_uid, SUM(used_reserve) AS used_reserve FROM {$payment_db}.a_reserve_member WHERE m_uid={$_MEMBER['m_uid']} AND r_type=2 GROUP BY m_uid";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				$used_reserve = 0;
+				if(isset($sql))
+				{
+					$row = $sql->fetch(PDO::FETCH_ASSOC);
+					$used_reserve = $row['used_reserve'];
+					$sql->closeCursor();
+				}
+				$available_mileage = func_get_available_mileage($_MEMBER['m_uid'], $used_reserve, $dbconn, 1);
+				
+				$query = "SELECT COUNT(*) AS t_a_coupon_count FROM {$payment_db}.a_coupon_member WHERE m_uid={$_MEMBER['m_uid']} AND is_used=0 AND expire_time>now()";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				if(isset($sql))
+				{
+					$row = $sql->fetch(PDO::FETCH_ASSOC);
+					$sql->closeCursor();
+					$t_a_coupon_count = $row['t_a_coupon_count'];
+				}
+				
+*/
+			}
+		}
+	}
+}
+dbPDOClose($member_db,$member_host);
+if($t_cart_count > 0)
+{
+	setcookie("CART_N", $t_cart_count, 0, "/", "buyfine.net");
+}
+if($t_wish_count > 0)
+{
+	setcookie("WISH_N", $t_wish_count, 0, "/", "buyfine.net");
+}
+if($t_ship_count > 0)
+{
+	setcookie("SHIP_N", $t_ship_count, 0, "/", "buyfine.net");
+}
+
+if($is_yes_print>0) 
+{
+	echo "arr_query_runtime=";
+	echo("<pre>");print_r($arr_query_runtime);echo("</pre>");
+	unset($arr_query_runtime);
+}
+if($is_no_need_include < 1)
+{
+	$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+	if($arr_req_data['i_h_r'])
+	{
+		$r_uri = "/main.html";
+		if($arr_req_data['r_uri'])
+		{
+			$r_uri = $arr_req_data['r_uri'];
+		}
+		unset($arr_req_data);
+		$js_alert = "";
+		if($message)
+		{
+			$js_alert = "alert('{$message}');";
+		}
+		echo "
+			<script>
+				{$js_alert}
+				window.location = '{$r_uri}';
+			</script>
+		";
+		exit;
+	}
+	else
+	{
+		unset($arr_req_data);
+		$arr_result = array(
+			'result'=>$result_num,
+			'message'=>$message,
+			'err_id'=>$err_id,
+			'cart_total_items'=>$t_cart_count,
+			't_wish_count'=>$t_wish_count,
+			'r_uri'=>$t_m_uri,
+			'confirm_msg'=>$confirm_msg
+			#'info_list'=>$arr_member_info
+		);
+		unset($arr_member_info);
+		if($is_yes_print>1)
+		{
+			echo "arr_result=";
+			echo("<pre>");print_r($arr_result);echo("</pre>");
+		}
+		echo json_encode($arr_result);
+		unset($arr_result);
+	}
+}
+?>

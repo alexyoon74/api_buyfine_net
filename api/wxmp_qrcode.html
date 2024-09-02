@@ -1,0 +1,199 @@
+<?php
+exit;
+//wxmp_share_img.htm대체
+if(!preg_match("/wxmp.buyfine.net/i", $_SERVER['HTTP_HOST']) || !preg_match("/MicroMessenger/i", $_SERVER['HTTP_USER_AGENT']))
+{
+	exit;
+}
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+$IS_NO_NEED_MP_JS_CHECK = 1;
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+if(!$IS_WECHAT_JsApiPay) require_once "PUBLIC_FUNC/BUYFINE/wechat/WxPay.JsApiPay.php";
+include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+
+//'00','01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23'
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+$is_no_err = 1;
+$result_num = 0;
+$share_bg = "/home2/html/BUYFINE/imagegd.buyfine.net/files/wx/share/wxmp_share_bg.jpg";//750x1000
+$qrcode_img_loc_1 = "/home2/html/BUYFINE/imagegd.buyfine.net/files/wx/qrcode";
+$qrcode_img_http_1 = "https://imagegd.buyfine.net/files/wx/qrcode";
+if($_SERVER['SERVER_ADDR'] == $SERVER_TC_12_HOST)
+{
+	$share_bg = "/home2/html/BUYFINE/imagegd2.buyfine.net/files/wx/share/wxmp_share_bg.jpg";//750x1000
+	$qrcode_img_loc_1 = "/home2/html/BUYFINE/imagegd2.buyfine.net/files/wx/qrcode";
+	$qrcode_img_http_1 = "https://imagegd2.buyfine.net/files/wx/qrcode";
+}
+
+$qr_img_http = "";
+$avata_img_http = "https://img10.360buyimg.com/imgzone/jfs/t1/26799/2/2833/3161/5c218406E8553df07/81bd55e507d03b91.jpg";
+$is_wget_img = 0;
+$wx_nickname = "";
+if($is_no_err > 0)
+{
+	if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+}
+if($is_no_err>0 && !$_MEMBER['m_uid'])
+{
+	$is_no_err = 0;
+	$result_num = -23;
+}
+if($is_no_err > 0)
+{
+	$access_token = "";
+	$wx_tools = new JsApiPay();
+	$arr_wx_info = $wx_tools->GetWXAccessToken();
+	//print_r($arr_wx_info);
+	if($arr_wx_info['access_token'])
+	{
+		$access_token = $arr_wx_info['access_token'];
+	}
+	unset($arr_wx_info);
+	if($access_token)
+	{
+		//$arrPostFields = array('scene'=>'a1','page'=>'pages/index/index');
+		//$arrPostFields = array('scene'=>'a2','is_hyaline'=>true,'width'=>300);//is_hyaline=true(투명이미지 default false) width default 430
+		$arrPostFields = array('scene'=>'a2','is_hyaline'=>false,'width'=>300);//is_hyaline=true(투명이미지 default false) width default 430
+		$c_type = 'mp_qrcode';
+		$arr_qrcode_info = $wx_tools->GetWXMPQRCode($access_token, $arrPostFields ,$c_type);
+		if(is_array($arr_qrcode_info))
+		{
+			//echo "errcode = ".$arr_qrcode_info['errcode'];
+			//print_r($arr_qrcode_info);
+			$is_no_err = 0;
+			$result_num = -68;
+		}
+		else
+		{
+			$qrcode_img_loc_2 = date("H");
+			$qrcode_file_name = date("ymdHis")."_".$_MEMBER['m_uid'].".png";
+			$qrcode_path = $qrcode_img_loc_1."/".$qrcode_img_loc_2."/".$qrcode_file_name;
+			$save_qrcode_res = file_put_contents($qrcode_path, $arr_qrcode_info); 
+			//echo "save_qrcode_res={$save_qrcode_res} \n";
+			if($save_qrcode_res === false)
+			{
+				$is_no_err = 0;
+				$result_num = -76;
+			}
+			else
+			{
+				$result_num = 1;
+				$dbconn = dbPDOConn($member_db,$member_host);
+				$query = "SELECT m_uid, wx_nickname, is_headimgurl_change, wx_headimgurl FROM {$member_db}.wx_unionid_base_user_info WHERE m_uid={$_MEMBER['m_uid']}";
+				$sql = $dbconn->prepare($query);
+				$sql->execute();
+				$row = $sql->fetch(PDO::FETCH_ASSOC);
+				$sql->closeCursor();
+				$is_headimgurl_change = 0;
+				$wx_headimgurl = "";
+				if($row['m_uid'])
+				{
+					$wx_headimgurl = $row['wx_headimgurl'];
+					$wx_nickname = rawurlencode($row['wx_nickname']);
+					if($row['is_headimgurl_change'] > 0)
+					{
+						$is_headimgurl_change = 1;
+						$dbconn->query("UPDATE {$member_db}.wx_unionid_base_user_info SET is_headimgurl_change=0 WHERE m_uid={$_MEMBER['m_uid']}");
+					}
+				}
+				dbPDOClose($member_db,$member_host);
+				
+				$qr_img_http = rawurlencode($qrcode_img_http_1."/".$qrcode_img_loc_2."/".$qrcode_file_name);
+				if($_SERVER['SERVER_ADDR'] == $SERVER_TC_12_HOST)
+				{
+					$avata_img_loc_1 = str_ireplace("/wx/qrcode","/wx/avata",$qrcode_img_loc_1);
+					$avata_img_http_1 = str_ireplace("/wx/qrcode","/wx/avata",$qrcode_img_http_1);
+				}
+				else
+				{
+					$avata_img_loc_1 = str_ireplace("/wx/qrcode","/wx/avata",$qrcode_img_loc_1);
+					$avata_img_http_1 = str_ireplace("/wx/qrcode","/wx/avata",$qrcode_img_http_1);
+				}
+				$avata_img_loc_2 = $_MEMBER['m_uid']%10;
+				$avata_file_name = $_MEMBER['m_uid'].".jpg";
+				$avata_path = $avata_img_loc_1."/".$avata_img_loc_2."/".$avata_file_name;
+				if($wx_headimgurl)
+				{
+					if($is_headimgurl_change > 0)
+					{
+						$is_wget_img = 1;
+					}
+					else
+					{
+						$is_avata_file = is_file($avata_path);
+						if($is_avata_file)
+						{
+							$avata_img_http = rawurlencode($avata_img_http_1."/".$avata_img_loc_2."/".$avata_file_name);
+						}
+						else
+						{
+							$is_wget_img = 1;
+						}
+					}
+					if($is_wget_img > 0)
+					{
+						$exec_wget_str = "wget --no-dns-cache --no-proxy --user-agent=\"{$ARR_WGET_USER_AGENT_STR['1']}\" -t 8 -T 15 -O {$avata_path} {$wx_headimgurl}";
+						exec($exec_wget_str,$arr_out_str,$return_num);
+						if($return_num == '0') //if($return_num == '0') 1 start
+						{
+							unset($arr_out_str);
+							unset($return_num);
+							$is_avata_file = is_file($avata_path);
+							if($is_avata_file)
+							{
+								$avata_img_http = rawurlencode($avata_img_http_1."/".$avata_img_loc_2."/".$avata_file_name);
+							}
+						}
+					}
+				}
+			}
+		}
+		unset($arr_qrcode_info);
+	}
+	unset($wx_tools);
+}
+
+$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+$arr_result = array(
+	'result'=>$result_num,
+	'message'=>$message,
+	'name'=>$wx_nickname,
+	'qri'=>$qr_img_http,
+	'avata'=>$avata_img_http,
+	'is_new_img'=>$is_wget_img
+);
+if($is_yes_print>1)
+{
+	echo "arr_result=";
+	echo("<pre>");print_r($arr_result);echo("</pre>");
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>

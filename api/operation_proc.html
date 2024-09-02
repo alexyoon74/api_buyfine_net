@@ -1,0 +1,76 @@
+<?
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+if($_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+
+$is_no_err = 1;
+$result_num = 0;
+
+if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+
+if($is_no_err>0 && !$arr_req_data['type'])
+{
+	$is_no_err = 0;
+	$result_num = -2;
+}
+if($is_no_err>0 && $arr_req_data['type'])
+{
+	if($arr_req_data['type']=='del_cookie' && $arr_req_data['del_name'])
+	{
+		$result_num = 1;
+		setcookie($arr_req_data['del_name'], "", 0, "/", ".buyfine.net");
+	}
+}
+unset($arr_req_data);
+if($is_yes_print>0) 
+{
+	echo "arr_query_runtime=";
+	echo("<pre>");print_r($arr_query_runtime);echo("</pre>");
+	unset($arr_query_runtime);
+}
+
+$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+$arr_result = array(
+	'result'=>$result_num,
+	'message'=>$message
+);
+if($is_yes_print>1)
+{
+	echo "arr_result=";
+	echo("<pre>");print_r($arr_result);echo("</pre>");
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>

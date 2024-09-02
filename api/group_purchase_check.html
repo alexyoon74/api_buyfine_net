@@ -1,0 +1,183 @@
+<?
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+if($_COOKIE['BF_NAM'] && !$_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+else if($_COOKIE['BF_V3_T_M'] && !$_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+else if($_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+
+$is_no_err = 1;
+$result_num = 0;
+$gp_uid = 0;
+$gp_ready_num = 0;
+$gp_ready_add_fake_num = 0;
+$is_active_gp = 1;
+
+if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+
+if($is_no_err > 0)
+{
+	if($arr_req_data['uid'])
+	{
+		$temp_gp_uid = floatval($arr_req_data['uid']);
+		if(is_numeric($temp_gp_uid))
+		{
+			$gp_uid = $temp_gp_uid;
+		}
+	}
+}
+if($is_no_err>0 && $gp_uid<1)
+{
+	$is_no_err = 0;
+	$result_num = -16;
+}
+if($is_no_err>0 && $gp_uid>0)
+{
+	$now_datetime_str = date("Y-m-d H:i:s");
+	$result_num = 1;
+	$dbconn = dbPDOConn($payment_db,$payment_host);
+	
+	$and_gp_display_type = "'all','bf'";
+	if($_SERVER['SERVER_ADDR'] == $SERVER_TC_12_HOST)//test
+	{
+		$and_gp_display_type = "'all','bf','mp','wx'";
+	}
+	if($IS_WX_JS_SDK>0)
+	{
+		$and_gp_display_type = "'all','wx'";
+		if($is_wxmp_webview > 0)
+		{
+			$and_gp_display_type = "'all','mp'";
+		}
+	}
+	$query = "
+		SELECT
+			GPL.gp_uid, GPL.g_uid, GPL.gp_price, GPL.add_f_num, GPL.gp_start_time, GPL.gp_end_time
+		FROM
+			{$goods_db}.group_purchase_active GPA, {$goods_db}.group_purchase_list GPL
+		WHERE GPA.gp_uid=GPL.gp_uid
+		AND GPA.gp_uid={$gp_uid}
+		AND GPA.is_active>0
+		AND GPL.display_type IN ({$and_gp_display_type})
+	";
+	if($is_yes_print>0) $q_start_time=time();
+	$sql = $dbconn->prepare($query);
+	$sql->execute();
+	if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+	$gp_start_time = "";
+	$gp_end_time = "";
+	if(isset($sql))
+	{
+		$row = $sql->fetch(PDO::FETCH_ASSOC);
+		if($row['gp_uid'] && $row['g_uid']>0 && $row['gp_price']>0 && $row['gp_start_time']<$now_datetime_str && $row['gp_end_time']>$now_datetime_str)
+		{
+			$gp_ready_add_fake_num = $row['add_f_num'];
+			$gp_start_time = $row['gp_start_time'];
+			$gp_end_time = $row['gp_end_time'];
+		}
+		else 
+		{
+			$is_active_gp = 0;
+		}
+		$sql->closeCursor();
+	}
+	if($is_active_gp > 0)
+	{
+		$and_gp_not_in_m_uid = "";
+		if($_COOKIE['ud'] && $_MEMBER['m_uid'])
+		{
+			//$and_gp_not_in_m_uid = "AND PE.m_uid NOT IN ({$_MEMBER['m_uid']})";
+		}
+		$query = "
+			SELECT
+				COUNT(*) AS gp_ready_num
+			FROM
+				{$payment_db}.payment_v2 P, {$payment_db}.payment_v2_each PE
+			WHERE P.pa_uid=PE.pa_uid
+			AND PE.gp_uid={$gp_uid}
+			AND PE.gp_status=2
+			AND PE.pa_status IN (2,3,4,5,6,7)
+			{$and_gp_not_in_m_uid}
+			AND P.isAvailable=1
+			AND (P.order_time BETWEEN '{$gp_start_time}' AND '{$gp_end_time}')
+		";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+		if(isset($sql))
+		{
+			$row = $sql->fetch(PDO::FETCH_ASSOC);
+			if($row['gp_ready_num']>0)
+			{
+				$gp_ready_num = $row['gp_ready_num'];
+			}
+			$sql->closeCursor();
+		}
+	}
+	
+	dbPDOClose($payment_db,$payment_host);
+}
+$gp_ready_num = $gp_ready_num+$gp_ready_add_fake_num;
+unset($arr_req_data);
+if($is_yes_print>0) 
+{
+	echo "arr_query_runtime=";
+	echo("<pre>");print_r($arr_query_runtime);echo("</pre>");
+	unset($arr_query_runtime);
+}
+$is_active_gp = 1;
+//$gp_ready_num = 2;
+$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+$arr_result = array(
+	'result'=>$result_num,
+	'message'=>$message,
+	'uid'=>$gp_uid,
+	'is_active'=>$is_active_gp,
+	'ready_num'=>$gp_ready_num
+);
+if($is_yes_print>1)
+{
+	echo "arr_result=";
+	echo("<pre>");print_r($arr_result);echo("</pre>");
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>

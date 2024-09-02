@@ -1,0 +1,195 @@
+<?php
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+
+
+$is_no_err = 1;
+$result_num = 0;
+if($is_no_err > 0)
+{
+	if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+}
+if($is_no_err>0 && !$_MEMBER['m_uid'])
+{
+	$is_no_err = 0;
+	$result_num = -23;
+}
+$r_type = "";
+$sel_rv_uid = "";//구분자 쉼표
+$sel_rv_pid = "";//구분자 쉼표
+if($is_no_err > 0)
+{
+	if($arr_req_data['sel_rv_uid'])
+	{
+		$sel_rv_uid = @trim("{$arr_req_data['sel_rv_uid']}");
+	}
+	if($arr_req_data['sel_rv_pid'])
+	{
+		$sel_rv_pid = @trim("{$arr_req_data['sel_rv_pid']}");
+	}
+	
+	if($arr_req_data['rType'] == 'sel_del')
+	{
+		$r_type = 'sel_del';
+	}
+	else if($arr_req_data['rType'] == 'all_del')
+	{
+		$r_type = 'all_del';
+	}
+	
+	$arr_sel_rv_uid_check_rType = array('sel_del');
+	if(in_array($r_type, $arr_sel_rv_uid_check_rType))
+	{
+		if($is_no_err>0 && !$sel_rv_uid)
+		{
+			$is_no_err = 0;
+			$result_num = -22;
+		}
+		else if($is_no_err>0 && !$sel_rv_pid)
+		{
+			$is_no_err = 0;
+			$result_num = -22;
+		}
+	}
+	unset($arr_sel_rv_uid_check_rType);
+}
+$t_count = 0;
+if($is_no_err>0 && $r_type)
+{
+	$result_num = 1;
+	$dbconn = dbPDOConn($goods_db,$goods_host);
+	$is_select_t_count = 0;
+	if($r_type=='sel_del')
+	{
+		//$arr_sel_rv_uid = explode(",", $sel_rv_uid);
+		//$arr_sel_rv_uid = explode(":", $sel_rv_uid);//원래 , 이값으로 넘겼는데 str_filter 함수에서 , -> : 변환하였음.
+		$arr_sel_rv_uid = explode(":", $sel_rv_pid);//원래 , 이값으로 넘겼는데 str_filter 함수에서 , -> : 변환하였음.
+		$arr_new_sel_rv_uid = array();
+		foreach($arr_sel_rv_uid AS $w_uid)
+		{
+			$w_uid = @trim($w_uid);
+			if(!$w_uid) continue;
+			$arr_new_sel_rv_uid[] = $w_uid;
+		}
+		$arr_new_sel_rv_uid = array_unique($arr_new_sel_rv_uid);
+		if(count($arr_new_sel_rv_uid) > 0)
+		{
+			//$query = "DELETE FROM {$goods_db}.goods_recently_viewed WHERE m_uid={$_MEMBER['m_uid']} AND sort_num IN (".implode(",",$arr_new_sel_rv_uid).")";
+			$query = "DELETE FROM {$goods_db}.goods_recently_viewed WHERE m_uid={$_MEMBER['m_uid']} AND g_uid IN (".implode(",",$arr_new_sel_rv_uid).")";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql = $dbconn->prepare($query);
+			$sql->execute();
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+			$arr_mysql_err = $sql->errorInfo();
+			$mysql_errno = (int) $arr_mysql_err['1'];
+			unset($arr_mysql_err);
+			if($mysql_errno != '0')
+			{
+				$is_no_err = 0;
+				$result_num = -44;
+			}
+		}
+		unset($arr_new_sel_rv_uid);
+		$is_select_t_count = 1;
+	}//end if($r_type == 'sel_del')
+	else if($r_type == 'all_del')
+	{
+		$query = "DELETE FROM {$goods_db}.goods_recently_viewed WHERE m_uid={$_MEMBER['m_uid']} AND sort_num>0";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$arr_mysql_err = $sql->errorInfo();
+		$mysql_errno = (int) $arr_mysql_err['1'];
+		unset($arr_mysql_err);
+		if($mysql_errno != '0')
+		{
+			$is_no_err = 0;
+			$result_num = -44;
+		}
+		$t_count = 0;
+	}//end else if($r_type == 'all_del')
+	if($is_no_err>0 && $is_select_t_count>0)
+	{
+		$query = "SELECT COUNT(*) AS t_count FROM {$goods_db}.goods_recently_viewed WHERE m_uid={$_MEMBER['m_uid']} AND sort_num>0";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->query($query);
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		if(isset($sql))
+		{
+			$row = $sql->fetch(PDO::FETCH_ASSOC);
+			$sql->closeCursor();
+			$t_count = $row['t_count'];
+			if($t_count >= $MAX_RECENTLY_VIEW_NUM)//$MAX_RECENTLY_VIEW_NUM assign COMM_FUNC.inc
+			{
+				$t_count = $MAX_RECENTLY_VIEW_NUM;
+			}
+		}
+	}
+	dbPDOClose($goods_db,$goods_host);
+	//setcookie("RV_N", $t_count, 0, "/", "buyfine.net");
+}
+unset($arr_req_data);
+if($is_yes_print>0) 
+{
+	echo "arr_query_runtime=";
+	echo("<pre>");print_r($arr_query_runtime);echo("</pre>");
+	unset($arr_query_runtime);
+}
+
+$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+if($r_type=='sel_del' || $r_type=='all_del')
+{
+	$arr_result = array(
+		'result'=>$result_num,
+		'message'=>$message,
+		'total_items'=>$t_count
+	);
+}
+else
+{
+	$result_num = -57;
+	$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+	$arr_result = array(
+		'result'=>$result_num,
+		'message'=>$message
+	);
+}
+if($is_yes_print>1)
+{
+	echo "arr_result=";
+	echo("<pre>");print_r($arr_result);echo("</pre>");
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>

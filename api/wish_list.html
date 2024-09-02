@@ -1,0 +1,612 @@
+<?
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+if($_COOKIE['BF_NAM'] && !$_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+else if($_COOKIE['BF_V3_T_M'] && !$_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+else if($_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_size_str.inc";
+if(!$IS_TODAYS_PROMOTION) include_once "{$BF_WWW_SERVER_LOC}/files/etc/arr_todays_promotion.inc";//$BF_WWW_SERVER_LOC assign /inc/config.inc
+
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+
+$is_no_err = 1;
+$result_num = 0;
+
+if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+
+$w_type = "";
+$g_uid = 0;
+$sel_w_uid = "";//구분자 쉼표
+$selected_color_str = "";
+$selected_size_str = "";
+if($is_no_err > 0)
+{
+	if($arr_req_data['pid'])
+	{
+		$g_uid = floatval("{$arr_req_data['pid']}");
+	}
+	if($arr_req_data['sel_w_uid'])
+	{
+		$sel_w_uid = @trim("{$arr_req_data['sel_w_uid']}");
+	}
+	if($arr_req_data['color'])
+	{
+		$selected_color_str = $arr_req_data['color'];
+	}
+	if($arr_req_data['size'])
+	{
+		$selected_size_str = $arr_req_data['size'];
+	}
+	
+	if($arr_req_data['wType'] == 'insert')
+	{
+		$w_type = 'insert';
+	}
+	else if($arr_req_data['wType'] == 'list_insert')
+	{
+		$w_type = 'list_insert';
+		$selected_color_str = "No Color";
+		$selected_size_str = "No Size";
+	}
+	else if($arr_req_data['wType'] == 'sel_copy')
+	{
+		$w_type = 'sel_copy';
+	}
+	else if($arr_req_data['wType'] == 'all_copy')
+	{
+		$w_type = 'all_copy';
+	}
+	else if($arr_req_data['wType'] == 'sel_del')
+	{
+		$w_type = 'sel_del';
+	}
+	else if($arr_req_data['wType'] == 'all_del')
+	{
+		$w_type = 'all_del';
+	}
+	else if($arr_req_data['wType'] == 'list_del')
+	{
+		$w_type = 'list_del';
+		$sel_w_uid = $g_uid;
+		$g_uid = 0;
+	}
+	else
+	{
+		//$w_type = 'list';
+	}
+	
+	$arr_g_uid_check_wType = array('insert','list_insert');
+	$arr_sel_w_uid_check_wType = array('sel_copy','sel_del','list_del');
+	$arr_cNs_check_wType = array('insert','list_insert');
+	
+	if(in_array($w_type, $arr_g_uid_check_wType))
+	{
+		if($is_no_err>0 && !$g_uid)
+		{
+			$is_no_err = 0;
+			$result_num = -16;
+		}
+	}
+	if(in_array($w_type, $arr_cNs_check_wType))
+	{
+		if($is_no_err>0 && !$selected_color_str)
+		{
+			$is_no_err = 0;
+			$result_num = -18;
+		}
+		else if($is_no_err>0 && !$selected_size_str)
+		{
+			$is_no_err = 0;
+			$result_num = -19;
+		}
+	}
+	if(in_array($w_type, $arr_sel_w_uid_check_wType))
+	{
+		if($is_no_err>0 && !$sel_w_uid)
+		{
+			$is_no_err = 0;
+			$result_num = -22;
+		}
+	}
+	
+	unset($arr_g_uid_check_wType);
+	unset($arr_sel_w_uid_check_wType);
+	unset($arr_cNs_check_wType);
+}
+
+$t_wish_count = 0;
+$arr_wish_insert = array();
+if($is_no_err>0 && $w_type)
+{
+	$result_num = 1;
+	$dbconn = dbPDOConn($goods_db,$goods_host);
+	$wish_tb = "goods_wish_list";
+	$is_no_auth_wish = 0;
+	if($_COOKIE['BF_NAM'] && !$_MEMBER['m_uid'])
+	{
+		$is_no_auth_wish = 1;
+		$wish_tb = "goods_wish_list_no_auth";
+		$_MEMBER['m_uid'] = $_COOKIE['BF_NAM'];
+	}
+	else if(!$_MEMBER['m_uid'])
+	{
+		$is_no_auth_wish = 1;
+		$wish_tb = "goods_wish_list_no_auth";
+		if($is_yes_print>0) 
+		{
+			$arr_multi_query = array();
+			$q_start_time=time();
+		}
+		$query = "LOCK TABLES {$goods_db}.no_auth_temp_m_uid WRITE";
+		if($is_yes_print>0) $arr_multi_query[]=$query;
+		$dbconn->query($query);
+		$query = "SELECT MAX(no_auth_m_uid) AS no_auth_m_uid FROM {$goods_db}.no_auth_temp_m_uid";
+		if($is_yes_print>0) $arr_multi_query[]=$query;
+		$sql = $dbconn->query($query);
+		if(isset($sql))
+		{
+			$row = $sql->fetch(PDO::FETCH_ASSOC);
+			$sql->closeCursor();
+		}
+		if($row['no_auth_m_uid'])
+		{
+			$no_auth_m_uid = $row['no_auth_m_uid']+1;
+		}
+		else
+		{
+			$no_auth_m_uid = 1;
+		}
+		$query = "INSERT INTO {$goods_db}.no_auth_temp_m_uid (no_auth_m_uid) VALUES ({$no_auth_m_uid})";
+		if($is_yes_print>0) $arr_multi_query[]=$query;
+		$dbconn->query($query);
+		$query = "UNLOCK TABLES";
+		if($is_yes_print>0) $arr_multi_query[]=$query;
+		$dbconn->query($query);
+		if($is_yes_print>0) 
+		{
+			if(count($arr_multi_query) > 0)
+			{
+				get_query_runtime($q_start_time,implode("<br />",$arr_multi_query));//get_query_runtime assign COMM_FUNC.inc
+			}
+			unset($arr_multi_query);
+		}
+		setcookie('BF_NAM', $no_auth_m_uid, time()+60*60*24*730, '/', '.buyfine.net');
+		$_MEMBER['m_uid'] = $no_auth_m_uid;
+	}
+	if($selected_color_str)
+	{
+		$selected_color_str = str_replace(" (预订)", "", $selected_color_str);
+		$selected_color_str= str_replace(" [预订]", "", $selected_color_str);
+	}
+	if($selected_size_str)
+	{
+		$selected_size_str = str_replace(" (预订)", "", $selected_size_str);
+		$selected_size_str= str_replace(" [预订]", "", $selected_size_str);
+	} 
+	
+	$is_select_t_wish_count = 0;
+	if($w_type=='insert' || $w_type=='list_insert')
+	{
+		$query = "
+			SELECT 
+				GWL.wish_uid, GWL.g_option, GWL.g_color
+			FROM
+				{$goods_db}.{$wish_tb} GWL
+			WHERE GWL.g_uid={$g_uid} 
+			AND GWL.m_uid={$_MEMBER['m_uid']}
+			ORDER BY GWL.wish_uid
+		";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+		$arr_del_wish_uid = array();
+		$selected_no_s_color = strtolower(func_tmall_str_no_space($selected_color_str, 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+		$selected_no_s_size = strtolower(func_str_no_space($selected_size_str, 2));
+		$selected_no_s_size = @trim(str_ireplace("-PRE-ORDER","",$selected_no_s_size));
+		$selected_no_s_cNs = $selected_no_s_color.$selected_no_s_size;
+		if(isset($sql))
+		{
+			while($row=$sql->fetch(PDO::FETCH_ASSOC))
+			{
+				$no_s_color = strtolower(func_tmall_str_no_space($row['g_color'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+				$no_s_size = strtolower(func_str_no_space($row['g_option'], 2));
+				$no_s_size = @trim(str_ireplace("-PRE-ORDER","",$no_s_size));
+				$no_s_cNs = $no_s_color.$no_s_size;
+				if($selected_no_s_cNs == $no_s_cNs)
+				{
+					$arr_del_wish_uid[] = $row['wish_uid'];
+				}
+			}
+			$sql->closeCursor();
+		}
+		$query = "LOCK TABLES {$goods_db}.{$wish_tb} WRITE";
+		if($is_yes_print>0) $q_start_time=time();
+		$dbconn->query($query);
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$query = "SELECT MIN(wish_uid) AS wish_uid FROM {$goods_db}.{$wish_tb}";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->query($query);
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$row = $sql->fetch(PDO::FETCH_ASSOC);
+		$sql->closeCursor();
+		if($row['wish_uid'])
+		{
+			$wish_uid = $row['wish_uid']-1;
+		}
+		else
+		{
+			$wish_uid = 4294967295;
+		}
+		$is_no_cns = 0;
+		if($w_type=='list_insert' || $arr_req_data['ion'])
+		{
+			$is_no_cns = 1;
+		}
+		$query = "INSERT INTO {$goods_db}.{$wish_tb} (wish_uid, m_uid, g_uid, g_option, g_color, is_economy, is_no_cns, is_m) VALUES ({$wish_uid}, {$_MEMBER['m_uid']}, {$g_uid}, '{$selected_size_str}', '{$selected_color_str}', 0, {$is_no_cns}, 1)";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$arr_mysql_err = $sql->errorInfo();
+		$mysql_errno = (int) $arr_mysql_err['1'];
+		//print_r($arr_mysql_err);
+		unset($arr_mysql_err);
+		if($mysql_errno != '0')
+		{
+			$is_no_err = 0;
+			$result_num = -44;
+		}
+		else
+		{
+			$arr_wish_insert['w_uid'] = $wish_uid;
+		}
+		$dbconn->query("UNLOCK TABLES");
+		if($is_yes_print>0) 
+		{
+			echo "arr_del_wish_uid=";
+			echo("<pre>");print_r($arr_del_wish_uid);echo("</pre>");
+		}
+		if(count($arr_del_wish_uid)>0 && $is_no_err>0)
+		{
+			$query = "DELETE FROM {$goods_db}.{$wish_tb} WHERE wish_uid IN (".implode(",",$arr_del_wish_uid).") AND m_uid={$_MEMBER['m_uid']}";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql = $dbconn->prepare($query);
+			$sql->execute();
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		}
+		unset($arr_del_wish_uid);
+		$is_select_t_wish_count = 1;
+	}//end if($w_type == 'insert')
+	else if($w_type == 'sel_copy')
+	{
+		$cart_tb = "goods_cart";
+		if($is_no_auth_wish > 0)
+		{
+			$cart_tb = "goods_cart_no_auth";
+		}
+		$arr_sel_w_uid = explode(":", $sel_w_uid);//원래 , 이값으로 넘겼는데 str_filter 함수에서 , -> : 변환하였음.
+		$arr_new_sel_w_uid = array();
+		foreach($arr_sel_w_uid AS $w_uid)
+		{
+			$w_uid = @trim($w_uid);
+			if(!$w_uid) continue;
+			$arr_new_sel_w_uid[] = $w_uid;
+		}
+		$arr_new_sel_w_uid = array_unique($arr_new_sel_w_uid);
+		if(count($arr_new_sel_w_uid) > 0)
+		{
+			$query = "
+				SELECT 
+					GWL.wish_uid, GWL.g_uid, GWL.g_option, GWL.g_color, GWL.is_no_img, GWL.is_no_cns
+				FROM
+					{$goods_db}.{$wish_tb} GWL
+				WHERE GWL.wish_uid IN (".implode(",",$arr_new_sel_w_uid).") 
+				AND GWL.m_uid={$_MEMBER['m_uid']}
+			";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql = $dbconn->prepare($query);
+			$sql->execute();
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+			$arr_wish_info = array();
+			$arr_g_uid = array();
+			if(isset($sql))
+			{	
+				while($row=$sql->fetch(PDO::FETCH_ASSOC))
+				{
+					$no_s_color = strtolower(func_tmall_str_no_space($row['g_color'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+					$no_s_size = strtolower(func_str_no_space($row['g_option'], 2));
+					$no_s_size = @trim(str_ireplace("-PRE-ORDER","",$no_s_size));
+					$no_s_cNs = $no_s_color.$no_s_size;
+					$cart_qty = 1;
+					if(count($arr_wish_info[$row['g_uid']][$no_s_cNs]) > 0)
+					{
+						$cart_qty = $arr_wish_info[$row['g_uid']][$no_s_cNs]['qty']+1;
+					}
+					$arr_g_uid[] = $row['g_uid'];
+					$arr_wish_info[$row['g_uid']][$no_s_cNs]['color'] = $row['g_color'];
+					$arr_wish_info[$row['g_uid']][$no_s_cNs]['size'] = $row['g_option'];
+					$arr_wish_info[$row['g_uid']][$no_s_cNs]['qty'] = $cart_qty;
+				}
+				$sql->closeCursor();
+			}
+			if(count($arr_g_uid)>1) $arr_g_uid=array_unique($arr_g_uid);
+			if($is_yes_print>1) 
+			{
+				echo "arr_g_uid=";
+				echo("<pre>");print_r($arr_g_uid);echo("</pre>");
+				echo "arr_wish_info=";
+				echo("<pre>");print_r($arr_wish_info);echo("</pre>");
+			}
+			if(count($arr_g_uid) > 0)
+			{
+				$query = "
+					SELECT 
+						GC.cart_uid, GC.g_uid, GC.order_count, GC.g_option, GC.g_color
+					FROM
+						{$goods_db}.{$cart_tb} GC
+					WHERE GC.g_uid IN (".implode(",",$arr_g_uid).") 
+					AND GC.m_uid={$_MEMBER['m_uid']}
+					ORDER BY GC.cart_uid
+					LIMIT 0, {$MAX_CART_NUM}
+				";//$MAX_CART_NUM assign COMM_FUNC.inc
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->prepare($query);
+				$sql->execute();
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				if(isset($sql))
+				{
+					while($row=$sql->fetch(PDO::FETCH_ASSOC))
+					{
+						$no_s_color = strtolower(func_tmall_str_no_space($row['g_color'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+						$no_s_size = strtolower(func_str_no_space($row['g_option'], 2));
+						$no_s_size = @trim(str_ireplace("-PRE-ORDER","",$no_s_size));
+						$no_s_cNs = $no_s_color.$no_s_size;
+						if(count($arr_wish_info[$row['g_uid']][$no_s_cNs]) > 0)
+						{
+							$arr_wish_info[$row['g_uid']][$no_s_cNs]['qty'] = $arr_wish_info[$row['g_uid']][$no_s_cNs]['qty']+$row['order_count'];
+							$arr_del_cart_uid[] = $row['cart_uid'];
+						}
+					}
+					$sql->closeCursor();
+				}
+			}
+			unset($arr_g_uid);
+			if($is_yes_print>1) 
+			{
+				echo "arr_wish_info - 2 =";
+				echo("<pre>");print_r($arr_wish_info);echo("</pre>");
+				echo "arr_del_cart_uid=";
+				echo("<pre>");print_r($arr_del_cart_uid);echo("</pre>");
+			}
+			if(count($arr_wish_info) > 0)
+			{
+				$query = "LOCK TABLES {$goods_db}.{$cart_tb} WRITE";
+				if($is_yes_print>0) $q_start_time=time();
+				$dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				$query = "SELECT MIN(cart_uid) AS cart_uid FROM {$goods_db}.{$cart_tb}";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				$row = $sql->fetch(PDO::FETCH_ASSOC);
+				$sql->closeCursor();
+				if($row['cart_uid'])
+				{
+					$cart_uid = $row['cart_uid']-1;
+				}
+				else
+				{
+					$cart_uid = 4294967295;
+				}
+				$cp_uid = 1;
+				$uid = 0;
+				$check_cp_used = 0;
+				$expire_time = date("Y-m-d H:i:s");
+				foreach($arr_wish_info AS $g_uid=>$arr_value)
+				{
+					foreach($arr_value AS $cns_key=>$arr_w_value)
+					{
+						$query = "INSERT INTO {$goods_db}.{$cart_tb} (cart_uid, m_uid, g_uid, order_count, g_option, g_color, cp_uid, uid, check_cp_used, is_economy, is_m, expire_time) VALUES ({$cart_uid}, {$_MEMBER['m_uid']}, {$g_uid}, {$arr_w_value['qty']}, '{$arr_w_value['size']}', '{$arr_w_value['color']}', {$cp_uid}, {$uid}, {$check_cp_used}, 0, 1, '{$expire_time}')";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql = $dbconn->prepare($query);
+						$sql->execute();
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+						$arr_mysql_err = $sql->errorInfo();
+						$mysql_errno = (int) $arr_mysql_err['1'];
+						unset($arr_mysql_err);
+						if($mysql_errno != '0')
+						{
+							$is_no_err = 0;
+							$result_num = -44;
+							break;
+						}
+						else
+						{
+							$arr_cart_insert_c_uid[] = $cart_uid;
+							$cart_uid--;
+						}
+					}
+				}
+				$dbconn->query("UNLOCK TABLES");
+			}
+			unset($arr_wish_info);
+			if(count($arr_del_cart_uid)>0 && $is_no_err>0)
+			{
+				$query = "DELETE FROM {$goods_db}.{$cart_tb} WHERE cart_uid IN (".implode(",",$arr_del_cart_uid).") AND m_uid={$_MEMBER['m_uid']}";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->prepare($query);
+				$sql->execute();
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+			}
+			unset($arr_del_cart_uid);
+		}
+		unset($arr_new_sel_w_uid);
+		$is_select_t_wish_count = 1;
+	}//end else if($w_type == 'sel_copy')
+	else if($w_type == 'all_copy')//이건 모바일앱에서 카트insert처리함
+	{
+		
+	}//end else if($w_type == 'all_copy')
+	else if($w_type=='sel_del' || $w_type=='list_del')
+	{
+		//$arr_sel_w_uid = explode(",", $sel_w_uid);
+		$arr_sel_w_uid = explode(":", $sel_w_uid);//원래 , 이값으로 넘겼는데 str_filter 함수에서 , -> : 변환하였음.
+		$arr_new_sel_w_uid = array();
+		foreach($arr_sel_w_uid AS $w_uid)
+		{
+			$w_uid = @trim($w_uid);
+			if(!$w_uid) continue;
+			$arr_new_sel_w_uid[] = $w_uid;
+		}
+		$arr_new_sel_w_uid = array_unique($arr_new_sel_w_uid);
+		if(count($arr_new_sel_w_uid) > 0)
+		{
+			$query = "DELETE FROM {$goods_db}.{$wish_tb} WHERE wish_uid IN (".implode(",",$arr_new_sel_w_uid).") AND m_uid={$_MEMBER['m_uid']}";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql = $dbconn->prepare($query);
+			$sql->execute();
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+			$arr_mysql_err = $sql->errorInfo();
+			$mysql_errno = (int) $arr_mysql_err['1'];
+			unset($arr_mysql_err);
+			if($mysql_errno != '0')
+			{
+				$is_no_err = 0;
+				$result_num = -44;
+			}
+		}
+		unset($arr_new_sel_w_uid);
+		$is_select_t_wish_count = 1;
+	}//end else if($w_type == 'sel_del')
+	else if($w_type == 'all_del')
+	{
+		$query = "DELETE FROM {$goods_db}.{$wish_tb} WHERE m_uid={$_MEMBER['m_uid']}";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->prepare($query);
+		$sql->execute();
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$arr_mysql_err = $sql->errorInfo();
+		$mysql_errno = (int) $arr_mysql_err['1'];
+		unset($arr_mysql_err);
+		if($mysql_errno != '0')
+		{
+			$is_no_err = 0;
+			$result_num = -44;
+		}
+		$t_wish_count = 0;
+	}//end else if($w_type == 'all_del')
+	
+	if($is_no_err>0 && $is_select_t_wish_count>0)
+	{
+		$query = "SELECT COUNT(*) AS t_wish_count FROM {$goods_db}.goods G, {$goods_db}.{$wish_tb} GWL WHERE G.g_uid=GWL.g_uid AND GWL.m_uid={$_MEMBER['m_uid']}";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->query($query);
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		if(isset($sql))
+		{
+			$row = $sql->fetch(PDO::FETCH_ASSOC);
+			$sql->closeCursor();
+			$t_wish_count = $row['t_wish_count'];
+			$max_wish_num = $MAX_WISH_NUM;//$MAX_WISH_NUM assign COMM_FUNC.inc
+			if($is_no_auth_wish<1 && $ARR_MAX_WISH_NUM_M_UID[$_MEMBER['m_uid']])//$ARR_MAX_WISH_NUM_M_UID assign COMM_FUNC.inc
+			{
+				$max_wish_num = $ARR_MAX_WISH_NUM_M_UID[$_MEMBER['m_uid']];
+			}
+			if($t_wish_count > $max_wish_num)
+			{	
+				$t_wish_count = $max_wish_num;
+				$over_t_num = $row['t_wish_count'];
+				if(!$over_t_num) $over_t_num=0;
+				$query = "INSERT INTO {$goods_db}.cart_wish_max_over_info (uid, m_uid, del_tb, t_num, update_time) VALUES (NULL, {$_MEMBER['m_uid']}, '{$wish_tb}', {$over_t_num}, now())";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->prepare($query);
+				$sql->execute();
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+			}
+		}
+	}
+	dbPDOClose($goods_db,$goods_host);
+	setcookie("WISH_N", $t_wish_count, 0, "/", "buyfine.net");
+}
+unset($arr_req_data);
+if($is_yes_print>0) 
+{
+	echo "arr_query_runtime=";
+	echo("<pre>");print_r($arr_query_runtime);echo("</pre>");
+	unset($arr_query_runtime);
+}
+
+$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+if($w_type=='insert' || $w_type=='list_insert')
+{
+	if(!$arr_wish_insert['w_uid']) $arr_wish_insert['w_uid']=0;
+	$arr_result = array(
+		'result'=>$result_num,
+		'message'=>$message,
+		'w_uid'=>$arr_wish_insert['w_uid'],
+		'total_items'=>$t_wish_count
+	);
+}
+else if($w_type=='sel_del' || $w_type=='list_del' || $w_type=='all_del' || $w_type=='sel_copy' || $w_type=='all_copy')
+{
+	$arr_result = array(
+		'result'=>$result_num,
+		'message'=>$message,
+		'total_items'=>$t_wish_count
+	);
+}
+else
+{
+	$result_num = -57;
+	$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+	$arr_result = array(
+		'result'=>$result_num,
+		'message'=>$message
+	);
+}
+unset($arr_wish_insert);
+if($is_yes_print>1)
+{
+	echo "arr_result=";
+	echo("<pre>");print_r($arr_result);echo("</pre>");
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>

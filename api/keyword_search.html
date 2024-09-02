@@ -1,0 +1,399 @@
+<?
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+if($_COOKIE['ud'])
+{
+	if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+}
+include_once "{$BF_WWW_SERVER_LOC}/search/func_utf8_index_searcher.inc";//$BF_WWW_SERVER_LOC assign /inc/config.inc
+
+$is_robot = 0;
+foreach($ARR_ROBOT_STR AS $robot_str)
+{
+	if(preg_match("/".$robot_str."/i", $_SERVER['HTTP_USER_AGENT']))
+	{
+		$is_robot = 1;
+		break;
+	}
+	else
+	{
+	}
+}
+foreach($ARR_ROBOT_IP_LISTS AS $robot_ip_str) // asing $USER_REMOTE_IP, $ARR_ROBOT_IP_LISTS COMM_FUNC
+{
+	if(preg_match("/".$robot_ip_str."/i", $USER_REMOTE_IP))
+	{
+		$is_robot = 1;
+		break;
+	}
+	else
+	{
+	}
+}
+$no_manner_ip_count = count($ARR_ROBOT_NO_MANNER_IP_LISTS); // $USER_REMOTE_IP, $ARR_ROBOT_NO_MANNER_IP_LISTS assign COMM_FUNC.inc
+if($no_manner_ip_count > 0)
+{
+	if(in_array($USER_REMOTE_IP, $ARR_ROBOT_NO_MANNER_IP_LISTS))
+	{
+		$is_robot = 1;
+	}
+}
+if($is_robot) exit;
+
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+
+$is_no_err = 1;
+$result_num = 0;
+$is_robot = 0;
+
+if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+
+$search_str = "";
+if($arr_req_data['s_word'])
+{
+	$search_str = $arr_req_data['s_word'];
+}
+if($is_no_err>0 && !$search_str)
+{
+	$is_no_err = 0;
+	$result_num = -36;
+}
+
+$arr_keyword_list = array();
+if($is_no_err>0 && $search_str)
+{
+	$result_num = 1;
+	
+	if(count($ARR_ONLY_BF_EXCEPT_NOT_IN_SITE_CODE_M_UID) > 0)
+	{
+		if($_MEMBER['m_uid'])
+		{
+			if(in_array($_MEMBER['m_uid'], $ARR_ONLY_BF_EXCEPT_NOT_IN_SITE_CODE_M_UID)) // $ARR_ONLY_BF_EXCEPT_NOT_IN_SITE_CODE_M_UID assign COMM_FUNC.inc
+			{
+				$ARR_ONLY_BF_NOT_IN_SITE_CODE = array();// COMM_FUNC.inc 선언한 $ARR_ONLY_BF_NOT_IN_SITE_CODE 값을 초기화 시킴
+			}
+		}	
+	}
+	if(count($ARR_ONLY_BF_TEST_NOT_IN_SITE_CODE) > 0)// $ARR_ONLY_BF_TEST_NOT_IN_SITE_CODE assign COMM_FUNC.inc
+	{
+		$is_bf_goods_test_m_uid = 0;
+		if($_MEMBER['m_uid'])
+		{
+			if(count($ARR_ONLY_BF_EXCEPT_TEST_NOT_IN_SITE_CODE_M_UID) > 0)
+			{
+				if(in_array($_MEMBER['m_uid'], $ARR_ONLY_BF_EXCEPT_TEST_NOT_IN_SITE_CODE_M_UID)) // $ARR_ONLY_BF_EXCEPT_TEST_NOT_IN_SITE_CODE_M_UID assign COMM_FUNC.inc
+				{
+					$ARR_ONLY_BF_NOT_IN_SITE_CODE = array();// COMM_FUNC.inc 선언한 $ARR_ONLY_BF_NOT_IN_SITE_CODE 값을 초기화 시킴
+					$is_bf_goods_test_m_uid = 1;
+				}
+			}
+		}
+		if($is_bf_goods_test_m_uid < 1)
+		{
+			$ARR_ONLY_BF_NOT_IN_SITE_CODE = array_merge($ARR_ONLY_BF_NOT_IN_SITE_CODE, $ARR_ONLY_BF_TEST_NOT_IN_SITE_CODE);
+			$ARR_ONLY_BF_NOT_IN_SITE_CODE = array_unique($ARR_ONLY_BF_NOT_IN_SITE_CODE);
+		}
+	}
+	$not_in_site_code = "";
+	if(count($ARR_ONLY_BF_NOT_IN_SITE_CODE) > 0)
+	{
+		$not_in_site_code = "AND G.site_code NOT IN (".implode(",",$ARR_ONLY_BF_NOT_IN_SITE_CODE).")";
+	}
+	
+	$search_str = str_replace("[br]","<br>",$search_str);
+	$temp_s_word = $search_str;
+	$temp_s_word = @trim(strtolower($temp_s_word));
+	$temp_s_word = preg_replace("/\s+/"," ",$temp_s_word);//공백 2칸이상 1칸으로
+	$arr_temp_s_word2 = explode(" ",$temp_s_word);
+	$count_arr_temp_s_word2 = count($arr_temp_s_word2);
+	if($count_arr_temp_s_word2 == 1)
+	{
+		$arr_temp_s_word = explode("-",$temp_s_word);
+		$count_arr_temp_s_word = count($arr_temp_s_word);
+		if($count_arr_temp_s_word == 2)
+		{
+			$temp_s_word_num_check = is_numeric($arr_temp_s_word['1']);
+			if($temp_s_word_num_check)
+			{
+				$temp_s_word = str_replace("bi-","",$temp_s_word);
+			}
+		}
+	}
+	
+	if($temp_s_word=='sale' || $temp_s_word=='onsale') $temp_s_word='特惠';
+	$temp_s_word = special_utf8_replace($temp_s_word);
+	$temp_s_word = @trim(preg_replace("/\s+/"," ",$temp_s_word));//공백 2칸이상 1칸으로
+	
+	$len_s_word = mb_strlen($temp_s_word, 'UTF-8');
+	if($len_s_word > 1)
+	{
+		$arr_s_word = explode(" ",$temp_s_word);
+		$GB_ARR_S_WORD = $arr_s_word;
+		$t_word_count = 0;
+		$GB_ARR_OVERLAP_COUNT_STR = array();
+		foreach($arr_s_word AS $s_word)
+		{
+			$s_word = @trim($s_word);
+			if(!$s_word) continue;
+			$s_word_count = search_str_count($s_word);
+			$t_word_count += $s_word_count;
+		}
+		$GB_T_WORD_COUNT = $t_word_count;
+		$s_w_count_1 = 9;
+		$GB_S_W_COUNT_2 = 6;
+		
+		$is_already_dbclose = 0;
+		$dbconn = dbSelect($search_goods_db,dbConn($search_goods_host));
+		
+		$db_name = $search_goods_db;
+		$fds = "G.view_g_uid, G.g_title, GB.b_name, GB.b_name_cn";
+		$default_tb = "{$goods_db}.goods G, {$goods_db}.goods_brand GB";
+		$default_where = "
+			G.b_code=GB.b_code
+		";
+		$default_and = "
+						AND G.isAvailable=2
+						AND G.isSoldout=0
+		";
+		$join_uid = "g_uid";
+		$isLike = "F";
+		
+		if($is_yes_print>0) 
+		{
+			echo "GB_ARR_S_WORD=";
+			echo("<pre>");print_r($GB_ARR_S_WORD);echo("</pre>");
+		}
+		if($GB_T_WORD_COUNT > $s_w_count_1)
+		{
+			$isLike = "T";
+		}
+		else
+		{
+			$GB_DB = $db_name;
+			$GB_JOIN_UID = $join_uid;
+			$arr_q_value = return_loop_select_query($GB_ARR_S_WORD);
+			if($is_yes_print>0) 
+			{
+				echo "arr_q_value=";
+				echo("<pre>");print_r($arr_q_value);echo("</pre>");
+			}
+			$arr_replace_word = $arr_q_value['sword'];
+		
+			$like_and = @trim($arr_q_value['like_and']);
+			$arr_like_and = explode(" ", $like_and);
+			$like_count = count($arr_like_and);
+			$last_like_idx = $like_count-1;
+			$arr_new_like_and = array();
+			foreach($arr_like_and AS $like_key=>$like_value)
+			{
+				$arr_tbNvalue = explode("^", $like_value);
+				$like_tb_name = $arr_tbNvalue['0'];
+				$like_str = $arr_tbNvalue['1'];
+				//$like_str_len = strlen($like_str);
+				$like_str_len = mb_strlen($like_str, "UTF-8");
+				if($like_key == $last_like_idx)
+				{
+					if($like_str_len > 1)
+					{
+						$arr_new_like_and[] = "AND ".$like_tb_name." LIKE '".$like_str."%'"; 
+					}
+					else
+					{
+						if($like_str == 1)
+						{
+							$arr_new_like_and[] = "AND ".$like_tb_name."=".$like_str; 
+						}
+						else
+						{
+							/*
+if($like_count == 1)
+							{
+								$arr_new_like_and[] = "AND ".$like_tb_name." LIKE '".$like_str."%'"; 
+							}
+							else
+							{
+								$arr_new_like_and[] = "AND ".$like_tb_name."='".$like_str."'"; 
+							}
+*/
+							if($t_mb_len > 2)
+							{
+								$arr_new_like_and[] = "AND ".$like_tb_name." LIKE '".$like_str."%'"; 
+							}
+							else
+							{
+								$arr_new_like_and[] = "AND ".$like_tb_name."='".$like_str."'"; 
+							}
+						}
+					}
+				}
+				else
+				{
+					if($like_str == 1)
+					{
+						$arr_new_like_and[] = "AND ".$like_tb_name."=".$like_str; 
+					}
+					else
+					{
+						if($like_str_len>1 || $t_mb_len<2)
+						{
+							$arr_new_like_and[] = "AND ".$like_tb_name."='".$like_str."'"; 
+						}
+						else
+						{
+							$arr_new_like_and[] = "AND ".$like_tb_name." LIKE '".$like_str."%'"; 
+						}
+					}
+				}
+			}
+			$new_like_and = implode(" ", $arr_new_like_and);
+			if($arr_q_value['sort'])
+			{
+				//$sort_str = "{$arr_q_value['sort']}, G.g_uid DESC LIMIT 0, 30";
+				$sort_str = "{$arr_q_value['sort']} LIMIT 0, 30";
+			}
+			else
+			{
+				$sort_str = "G.g_uid DESC LIMIT 0, 30";
+			}
+			//$sort_str = "GB.b_name ASC LIMIT 0, 30";
+			$tb_str = "";
+			$g_title_group_by_str = "";
+			if($arr_q_value['tb'])
+			{
+				$tb_str = ", {$arr_q_value['tb']}";
+				//$g_title_group_by_str = "GROUP BY G.g_title";
+				$g_title_group_by_str = "GROUP BY GB.b_name";
+			}
+			if($arr_q_value['join'])
+			{
+				$arr_q_value['join'] = str_replace("A.","G.",$arr_q_value['join']);
+			}
+			$query = "
+				SELECT
+					{$fds}
+				FROM
+					{$default_tb}{$tb_str}
+				WHERE {$default_where} {$arr_q_value['join']} {$default_and} {$new_like_and} {$not_in_site_code} {$g_title_group_by_str} ORDER BY {$sort_str}
+			";
+			if($is_yes_print>0) $q_start_time=time();
+		}
+		if($t_word_count<1)
+		{
+			$is_no_err = 0;
+			$result_num = -36;
+		}
+		if($is_yes_print>0) 
+		{
+			echo "isLike={$isLike}<br />";
+			echo "temp_s_word={$temp_s_word}<br />";
+		}
+		if($is_no_err > 0)
+		{
+			if($isLike == "F")
+			{
+				$result = dbQuery($query, $dbconn);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				if(isset($result))
+				{
+					dbClose($dbconn);
+					$is_already_dbclose = 1;
+					$preg_match_s_word = func_preg_match_replace_str($temp_s_word);
+					$keyword_idx = 0;
+					while($row=mysql_fetch_assoc($result))
+					{
+						$row['g_title'] = g_tite_str_replace($row['g_title']);
+						$value = $row['g_title'];
+						$b_name = $row['b_name'];
+						$b_name_cn = $row['b_name_cn'];
+						$view_b_name = $b_name;
+						
+						$temp_b_name = special_utf8_replace($b_name);
+						$temp_b_name = @trim(preg_replace("/\s+/"," ",$temp_b_name));//공백 2칸이상 1칸으로
+						$temp_b_name_cn = "";
+						if($b_name_cn)
+						{
+							$temp_b_name_cn = special_utf8_replace($b_name_cn);
+							$temp_b_name_cn = @trim(preg_replace("/\s+/"," ",$temp_b_name_cn));//공백 2칸이상 1칸으로
+						}
+						$match_count = 0;
+						$cn_match_count = 0;
+						if(preg_match("/{$preg_match_s_word}/i", $temp_b_name))
+						{
+							$match_count = 1;
+						}
+						if($temp_b_name_cn)
+						{
+							if(preg_match("/{$preg_match_s_word}/i", $temp_b_name_cn))
+							{
+								$view_b_name = $b_name." ".$b_name_cn;
+								$cn_match_count = 1;
+							}
+						}
+						if($match_count<1 && $cn_match_count<1)
+						{
+							continue;
+						}
+						//$value = xml_str_filter($b_name);
+						$arr_keyword_list[$keyword_idx]['str'] = $view_b_name;
+						$arr_keyword_list[$keyword_idx]['en_str'] = urlencode($b_name);
+						$keyword_idx++;
+					}
+				}
+			}
+		}
+		if($is_already_dbclose < 1)
+		{
+			dbClose($dbconn);
+		}
+	}
+}
+unset($arr_req_data);
+if($is_yes_print>0) 
+{
+	echo "arr_query_runtime=";
+	echo("<pre>");print_r($arr_query_runtime);echo("</pre>");
+	unset($arr_query_runtime);
+}
+
+$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+$arr_result = array(
+	'result'=>$result_num,
+	'message'=>$message,
+	'keyword_list'=>$arr_keyword_list
+);
+unset($arr_keyword_list);
+if($is_yes_print>1)
+{
+	echo "arr_result=";
+	echo("<pre>");print_r($arr_result);echo("</pre>");
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>

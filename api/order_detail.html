@@ -1,0 +1,907 @@
+<?
+$is_yes_print = 0;
+if($_POST['alex_print'] > 0)
+{
+	$is_yes_print = $_POST['alex_print'];
+}
+else if($_GET['alex_print'] > 0)
+{
+	$is_yes_print = $_GET['alex_print'];
+}
+if($is_yes_print < 1)
+{
+	$is_need_json_header = 1;
+}
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+include_once "PUBLIC_FUNC/BUYFINE/china_address.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_size_str.inc";
+
+if($_GET['alex_print'])
+{
+	$_GET['alex_print'] = intval($_GET['alex_print']);
+	if($_GET['alex_print']>0 && $_MEMBER['m_uid']=='1') $is_yes_print=$_GET['alex_print'];
+	if($_GET['alex_print']>0 && $NO_AUTH_ALEX_PRINT>0) $is_yes_print=$_GET['alex_print'];//$NO_AUTH_ALEX_PRINT assign COMM_FUNC.inc
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	echo "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."<br />";
+}
+
+$is_no_err = 1;
+$result_num = 0;
+
+if($is_no_err > 0)
+{
+	if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+}
+if($is_no_err>0 && !$_MEMBER['m_uid'])
+{
+	$is_no_err = 0;
+	$result_num = -23;
+}
+
+$arr_detail_info = array();
+$pa_uid = 0;
+$order_type = "";
+if($is_no_err > 0)
+{
+	if($arr_req_data['oid'])
+	{
+		//$pa_uid = intval("{$arr_req_data['oid']}");
+		$pa_uid = floatval($arr_req_data['oid']);//mysql int(11) MAX=4294967295, int(10) MAX=2147483647 -  intval로처리하면 MAX값이 2147483647이걸로 처리됨
+	}
+	if($arr_req_data['oType'])
+	{
+		$order_type = $arr_req_data['oType'];
+	}
+	if(!$order_type) $order_type='detail';
+	if($is_no_err>0 && !$pa_uid)
+	{
+		$is_no_err = 0;
+		$result_num = -41;
+	}
+}
+$arr_sub_order_list = array();
+$arr_sub_refund_list = array();
+$orderer_name = "";
+$arr_receiver_list = array();
+$tt_order_count = 0;
+$tt_price = 0;
+$discount_price_t = 0;
+$tt_discount_price = 0;
+$t_paid_price = 0;
+$is_re_pay = 0;
+$is_re_addr = 1;
+$tt_mileage_num = 0;
+$tt_mileage_percent = 0;
+$order_time_str = "";
+$pay_time_str = "";
+$used_reserve_t = 0;
+$pay_type_str = "";
+$pa_status_t = "";
+$new_reserve_price = 0;
+$view_pay_reserve_percent_num = 0;
+$gp_was_price = 0;
+$gp_uid = 0;
+if($pa_uid>0 && $is_no_err>0)
+{
+	$dbconn = dbPDOConn($payment_db,$payment_host);
+
+	$arr_price_basic_info = func_get_price_basic_info($dbconn, 'pdo');
+	$margin_rate = $arr_price_basic_info['margin_rate'];
+	$exchange_rate = $arr_price_basic_info['exchange_rate'];
+	$alipay_exchange_rate = $arr_price_basic_info['alipay_exchange_rate'];
+	$exchange_rate_krw_cny = $arr_price_basic_info['exchange_rate_krw_cny'];
+	$exchange_rate_eur = $arr_price_basic_info['exchange_rate_eur'];
+	$exchange_rate_gbp = $arr_price_basic_info['exchange_rate_gbp'];
+	unset($arr_price_basic_info);
+	
+	$arr_not_re_payment = array("4294966881","4294966861","4294966862","4294966707","4294966620","4294966622");
+	//AND P.isAvailable=1
+	$query = "
+		SELECT
+			P.pa_uid, P.pg_uid, P.pa_status, P.pg_check_str, P.pay_type, P.tNd_price, P.tNd_price_usd, P.delivery_price, P.discount_type, P.discount_price, P.pay_reserve, P.is_pay_reserve_double, P.used_reserve, P.each_count, P.pay_m_level, P.order_time, P.pay_time, P.is_no_mileage, P.id_card_num, P.id_card_name, 
+			PI.order_name, PI.to_name, PI.to_phone, PI.to_cell, PI.to_zipcode, PI.to_state_code, PI.to_city_code, PI.to_address, PI.delivery_info
+		FROM
+			{$payment_db}.payment_v2 P, {$payment_db}.payment_v2_info PI
+		WHERE P.pa_uid=PI.pa_uid
+		AND P.pa_uid={$pa_uid}
+		AND P.m_uid={$_MEMBER['m_uid']}
+		GROUP BY P.pa_uid
+	";
+	if($is_yes_print>0) $q_start_time=time();
+	$sql = $dbconn->prepare($query);
+	$sql->execute();
+	if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+	if(isset($sql))
+	{
+		$row = $sql->fetch(PDO::FETCH_ASSOC);
+		$sql->closeCursor();
+	}
+	if(!$row['pa_uid'])
+	{
+		$is_no_err = 0;
+		$result_num = -42;
+	}
+	if($is_no_err > 0)
+	{
+		$result_num = 1;
+		$pa_uid_t = $row['pa_uid'];
+		$pay_type_t = $row['pay_type'];
+		$pay_reserve_t = $row['pay_reserve'];
+		$is_no_mileage = $row['is_no_mileage'];
+		$member_mileage_num = $ARR_VIP_MEMMBER_MILEAGE_NUM[$row['pay_m_level']];
+		$used_reserve_t = intval($row['used_reserve']);
+		$discount_price_t = $row['discount_price'];
+		$discount_type_t = $row['discount_type'];
+		$tNd_price_t = $row['tNd_price'];
+		$tNd_price_t_2 = $row['tNd_price'];
+		$tNd_price_usd_t = $row['tNd_price_usd'];
+		$each_count_t = $row['each_count'];
+		$is_pay_reserve_double = $row['is_pay_reserve_double'];
+		$is_new_reserve = 1;
+		if($row['pa_uid'] > 4294966385)
+		{
+			$is_new_reserve = 0;
+		}
+		$gf_r_price = $tNd_price_t-$discount_price_t;
+		$is_usd = 0;
+		if($row['tNd_price_usd']>0 && $row['pay_type']==68)
+		{
+			$is_usd = 1;
+			$tNd_price_usd = $row['tNd_price_usd'];
+		}
+		$pa_status_t = $row['pa_status'];
+		$order_time_str = $row['order_time'];
+		if($row['pay_time'] == "0000-00-00 00:00:00")
+		{
+			$pay_time_str = "结算确认中";
+		}
+		else
+		{
+			$pay_time_str = $row['pay_time'];
+		}
+		if(count($ARR_ONLY_BF_EXCEPT_NOT_IN_SITE_CODE_M_UID) > 0)
+		{
+			if($_MEMBER['m_uid'])
+			{
+				if(in_array($_MEMBER['m_uid'], $ARR_ONLY_BF_EXCEPT_NOT_IN_SITE_CODE_M_UID)) // $ARR_ONLY_BF_EXCEPT_NOT_IN_SITE_CODE_M_UID assign COMM_FUNC.inc
+				{
+					$ARR_ONLY_BF_NOT_IN_SITE_CODE = array();// COMM_FUNC.inc 선언한 $ARR_ONLY_BF_NOT_IN_SITE_CODE 값을 초기화 시킴
+				}
+			}	
+		}
+		$is_not_in_site_code = 0;
+		if(count($ARR_ONLY_BF_NOT_IN_SITE_CODE) > 0)
+		{
+			$is_not_in_site_code = 1;
+		}
+		$pay_type_str = $ARR_PAYMENT_TYPE[$pay_type_t];
+		if($pa_status_t == 12)
+		{
+			$used_reserve_t = 0;
+		}
+		$pg_check_str = $row['pg_check_str'];
+		$orderer_name = $row['order_name'];
+		$arr_receiver_list['name'] = $row['to_name'];
+		$arr_receiver_list['id_info'] = "";
+		if($row['id_card_num'] && $row['id_card_name'])
+		{
+			$arr_receiver_list['id_info'] = "身份证号码 / 姓名 : {$row['id_card_num']} / {$row['id_card_name']}";
+		}
+		$arr_receiver_list['zipcode'] = $row['to_zipcode'];
+		$arr_receiver_list['state_code'] = $row['to_state_code'];
+		$arr_receiver_list['city_code'] = $row['to_city_code'];
+		$to_state = $arr_state[$row['to_state_code']];//$arr_state assign china_address.inc
+		$to_city_code = $row['to_city_code']-1;
+		$to_city = $arr_city[$row['to_state_code']][$to_city_code];//$arr_city assign china_address.inc
+		if($row['pa_uid'] == '4294911581')
+		{
+			$reciver_addr = "{$row['to_address']}";
+		}
+		else
+		{
+			$reciver_addr = "{$to_state}省{$to_city} {$row['to_address']} [{$row['to_zipcode']}]";
+		}
+		$arr_receiver_list['address'] = $reciver_addr;
+		//$arr_receiver_list['address'] = $row['to_address'];
+		$arr_receiver_list['phone_num'] = $row['to_phone'];
+		$arr_receiver_list['cell_num'] = $row['to_cell'];
+		$arr_receiver_list['note'] = $row['delivery_info'];
+		$arr_tmall_img_info = array();
+		$arr_jd_img_info = array();
+		if($IS_USED_YZ_IMAGE > 0)
+		{
+			$query_yz = "
+				SELECT
+					GI.g_color AS no_s_g_color_list,
+					YPI.g_uid, YPI.is_major, YPI.img_type, YPI.url, YPI.ori_color_str
+				FROM	
+					{$payment_db}.payment_v2_each PE, {$goods_db}.goods_info GI, {$youzan_db}.youzan_picture_info YPI
+				WHERE PE.g_uid=GI.g_uid
+				AND PE.g_uid=YPI.g_uid
+				AND PE.pa_uid={$pa_uid_t} 
+				AND PE.paid_img_cp_num<1
+				AND GI.is_yz>0
+				AND YPI.img_type IN (1,3)
+				AND YPI.is_used_bf=1
+				ORDER BY PE.g_uid ASC, YPI.position ASC
+			";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql_yz = $dbconn->query($query_yz);
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query_yz);//get_query_runtime assign COMM_FUNC.inc
+			if(isset($sql_yz))
+			{
+				while($row_yz=$sql_yz->fetch(PDO::FETCH_ASSOC))
+				{
+					$no_s_color_str = strtolower(func_tmall_str_no_space($row_yz['ori_color_str'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+					if($no_s_color_str)
+					{
+						if($arr_jd_img_info[$row_yz['g_uid']][$no_s_color_str]) continue;
+						if($row_yz['no_s_g_color_list'])
+						{
+							$arr_stock_check_color = explode("|", $row_yz['no_s_g_color_list']);
+							if(!in_array($no_s_color_str, $arr_stock_check_color))
+							{
+								continue;
+							}
+							unset($arr_stock_check_color);
+						}
+						$row_yz['url'] = str_ireplace("https://","//",$row_yz['url']);
+						$row_yz['url'] = str_ireplace("http://","//",$row_yz['url']);
+						$arr_jd_img_info[$row_yz['g_uid']][$no_s_color_str] = $row_yz['url']."!small.jpg";
+						unset($arr_tmall_img_key_g_uid[$row_yz['g_uid']]);
+						unset($arr_jd_img_key_g_uid[$row_yz['g_uid']]);
+					}
+				}
+				$sql_yz->closeCursor();
+			}
+		}
+		if($IS_USED_TMALL_IMAGE > 0)//$IS_USED_TMALL_IMAGE assign COMM_FUNC.inc
+		{
+			$query_tmall = "
+				SELECT
+					PE.ea_uid, PE.g_uid,
+					TPI.url, TPI.url_or_byte_key
+				FROM	
+					{$payment_db}.payment_v2_each PE, {$goods_db}.goods_info GI, {$tmall_db}.tmall_picture_info TPI, {$tmall_db}.tmall_item TI
+				WHERE PE.g_uid=GI.g_uid  
+				AND PE.g_uid=TI.g_uid 
+				AND PE.g_uid=TPI.g_uid
+				AND PE.pa_uid={$pa_uid_t} 
+				AND PE.paid_img_cp_num<1
+				AND GI.is_tmall>0
+				AND TI.api_result_num=7
+				AND TI.is_tmall_use>0
+				AND TI.is_del_img=0
+				AND TPI.img_type=1
+				ORDER BY PE.g_uid ASC, TPI.position ASC
+			";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql_tmall = $dbconn->query($query_tmall);
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query_tmall);
+			if(isset($sql_tmall))
+			{
+				while($row_tmall=$sql_tmall->fetch(PDO::FETCH_ASSOC))
+				{
+					if(!$row_tmall['url'])
+					{
+						continue;
+					}
+					if(in_array($row_tmall['g_uid'], $ARR_NOT_USE_TMALL_IMG_G_UID))//$ARR_NOT_USE_TMALL_IMG_G_UID assign COMM_FUNC.inc
+					{
+						continue;
+					}
+					$arr_key = explode("___",$row_tmall['url_or_byte_key']);
+					$no_s_color_key = $arr_key['0'];
+					$row_tmall['url'] = func_tmall_img_uri_replace($row_tmall['url']);
+					//$arr_tmall_img_info[$row_tmall['g_uid']][$no_s_color_key] = $row_tmall['url']."_[img_size].jpg";
+					$arr_tmall_img_info[$row_tmall['g_uid']][$no_s_color_key] = $row_tmall['url'];
+				}
+				$sql_tmall->closeCursor();
+			}
+			unset($query_tmall);
+		}
+		if($IS_USED_JD_IMAGE > 0)//$IS_USED_JD_IMAGE assign COMM_FUNC.inc
+		{
+			/*
+			$query_jd = "
+				SELECT
+					PE.ea_uid, PE.g_uid, PE.c_value,
+					JWG.is_mark_img_done, JWG.is_mark_img_2_done,
+					JWP.is_major, JWP.img_host, JWP.img_explode, JWP.url, JWP.color_str
+				FROM	
+					{$payment_db}.payment_v2_each PE, {$goods_db}.goods_info GI, {$jd_db}.jd_ware_picture JWP, {$jd_db}.jd_ware_goods JWG
+				WHERE PE.g_uid=GI.g_uid
+				AND PE.g_uid=JWP.g_uid 
+				AND PE.g_uid=JWG.g_uid
+				AND PE.pa_uid={$pa_uid_t} 
+				AND PE.paid_img_cp_num<1
+				AND GI.is_set>0
+				AND JWG.api_result_num=6
+				AND JWG.is_jd_use=1
+				AND JWG.is_del_img=0
+				AND JWP.is_no_img=0
+				ORDER BY JWG.g_uid ASC, JWP.position ASC
+			";
+			*/
+			$query_jd = "
+				SELECT
+					PE.ea_uid, PE.g_uid, PE.c_value,
+					JWP.is_major, JWP.img_host, JWP.img_explode, JWP.url, JWP.color_str
+				FROM	
+					{$payment_db}.payment_v2_each PE, {$goods_db}.goods_info GI, {$jd_db}.jd_ware_picture JWP
+				WHERE PE.g_uid=GI.g_uid
+				AND PE.g_uid=JWP.g_uid 
+				AND PE.pa_uid={$pa_uid_t} 
+				AND PE.paid_img_cp_num<1
+				AND GI.is_set>0
+				AND JWP.is_no_img=0
+				ORDER BY JWP.g_uid ASC, JWP.position ASC
+			";
+			if($is_yes_print>0) $q_start_time=time();
+			$sql_jd = $dbconn->query($query_jd);
+			if($is_yes_print>0) get_query_runtime($q_start_time,$query_jd);//get_query_runtime assign COMM_FUNC.inc
+			if(isset($sql_jd))
+			{
+				while($row_jd=$sql_jd->fetch(PDO::FETCH_ASSOC))
+				{
+					/*
+					if($row_jd['is_mark_img_done']>0 || $row_jd['is_mark_img_2_done']>0)
+					{
+						if($row_jd['is_major'] > 0)//가끔 JD에서 이벤트할때 칼라별 첫메인이미지에 워터마크처럼 이미지를 오버레이 하기때문에 첫번째 이미지를 스킵하기 위함
+						{
+							continue;
+						}
+					}
+					*/
+					$arr_jd_vars = array('c_value'=>$row_jd['c_value']);
+					$arr_usede_jd_img_check = func_usede_jd_img_check($arr_jd_vars);
+					unset($arr_jd_vars);
+					$is_loop_use_jd_img = $arr_usede_jd_img_check['is_use_jd_img'];
+					unset($arr_usede_jd_img_check);
+					if($is_loop_use_jd_img < 1)
+					{
+						continue;
+					}
+					$no_s_color_str = strtolower(func_tmall_str_no_space($row_jd['color_str'], 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+					if($no_s_color_str)
+					{
+						if($arr_jd_img_info[$row_jd['g_uid']][$no_s_color_str]) continue;
+						if($arr_now_stock_no_s_g_color_list[$row_jd['g_uid']])
+						{
+							$arr_stock_check_color = explode("|", $arr_now_stock_no_s_g_color_list[$row_jd['g_uid']]);
+							if(!in_array($no_s_color_str, $arr_stock_check_color))
+							{
+								continue;
+							}
+							unset($arr_stock_check_color);
+						}
+						$arr_jd_vars = array(
+							'img_host'=>$row_jd['img_host'],
+							'img_explode'=>$row_jd['img_explode'],
+							'uri'=>$row_jd['url'],
+							'img_wh'=>'200x200'
+						);
+						$row_jd['url'] = func_jd_img_uri_replace($arr_jd_vars);
+						unset($arr_jd_vars);
+						$arr_jd_img_info[$row_jd['g_uid']][$no_s_color_str] = $row_jd['url'];
+					}
+				}
+				$sql_jd->closeCursor();
+			}
+		}
+		
+		$query = "
+			SELECT 
+				PE.ea_uid, PE.g_uid, PE.n_code, PE.sl_uid, PE.seller_g_uid, PE.c_value, PE.pa_status, PE.g_title, PE.t_price, PE.add_price, PE.order_count, PE.pay_reserve, PE.g_option, PE.g_color, PE.cp_pay_reserve, PE.cp_discount_price, PE.etc_discount_price, PE.cp_uid, PE.cpm_uid, PE.is_economy, PE.now_is_sale, PE.paid_img_cp_num, PE.gp_uid, PE.gp_status,
+				G.site_code, G.isAvailable, G.isSoldout, G.img_host, G.is_stock, G.stock_c,
+				GB.b_code, GB.b_name, GB.b_name_cn,
+				GI.is_tmall, GI.is_set AS is_jd, GI.is_yz, GI.color_img_list
+			FROM {$payment_db}.payment_v2_each PE, {$goods_db}.goods G, {$goods_db}.goods_info GI, {$goods_db}.goods_brand GB
+			WHERE PE.g_uid=G.g_uid
+			AND PE.g_uid=GI.g_uid
+			AND G.b_code=GB.b_code
+			AND PE.pa_uid={$pa_uid_t} 
+			ORDER BY PE.ea_uid ASC
+		";
+		if($is_yes_print>0) $q_start_time=time();
+		$sql = $dbconn->query($query);
+		if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+		$arr_refund_ea_uid = array();
+		if(isset($sql))
+		{
+			$arr_soldout_cpm_uid = array();
+			$r_num = 0;
+			$gf_discount_t = 0;
+			$is_guangfa_t = 0;
+			$a_is_special_event = 0;
+			$b_is_special_event = 0;
+			$add_price = 0;
+			$tt_cp_discount_price = 0;
+			//$no_img = "https://img.alicdn.com/imgextra/i4/1706222708/TB2O5PjbXXXXXX7XXXXXXXXXXXX_!!1706222708.jpg_200x200.jpg";
+			$no_img = "https://image.buyfine.net/images/public3/no_img_200x200.jpg?o=1";
+			while($row=$sql->fetch(PDO::FETCH_ASSOC))
+			{
+				if($row['add_price'] > 0)
+				{
+					$row['t_price'] = $row['t_price']-$row['add_price'];
+					$add_price = $row['add_price'];
+				}
+				$gf_discount = 0;
+				$is_guangfa = 0;
+				if($row['etc_discount_price'] > 0)
+				{
+					$gf_discount = $row['etc_discount_price'];
+					$gf_discount_t += $gf_discount;
+					$is_guangfa = 1;
+					$is_guangfa_t = 1;
+				}
+				$isAvailable = 2;
+				$isSoldout = 0;
+				if($row['ea_uid']==4294965836 || $row['ea_uid']==4294965823 || $row['ea_uid']==4294965824)
+				{
+					$row['isAvailable'] = 0;
+					$row['isSoldout'] = 1;
+				}
+				if($pa_status_t == 1)
+				{
+					if($row['pa_status'] =='0')
+					{
+						$row['isAvailable'] = 0;
+						$row['isSoldout'] = 1;
+					}
+					else if($is_not_in_site_code > 0)
+					{
+						if(in_array($row['site_code'], $ARR_ONLY_BF_NOT_IN_SITE_CODE))
+						{
+							$row['isAvailable'] = 0;
+							$row['isSoldout'] = 1;
+						}
+					}
+					else
+					{
+						if($row['is_stock'] && $row['stock_c']<1)
+						{
+							$row['isAvailable'] = 0;
+						}
+						else if($row['is_stock'] && $row['order_count']>$row['stock_c'])
+						{
+							$row['isAvailable'] = 0;
+						}
+					}
+			
+					$isAvailable = $row['isAvailable'];
+					$isSoldout = $row['isSoldout'];
+				}
+				else
+				{
+					if($row['pa_status'] =='0')
+					{
+						continue;
+					}
+				}
+				if(in_array($row['g_uid'], $ARR_FIXED_PRICE_G_UID_EVENT_A))
+				{
+					$a_is_special_event = 1;
+				}
+				else if(in_array($row['g_uid'], $ARR_FIXED_PRICE_G_UID_EVENT_B))
+				{
+					$b_is_special_event = 1;
+				}
+				if($row['pa_status'] == 2)
+				{
+					if(in_array($row['pa_uid'],$ARR_FAKE_PA_STATUS)) // ARR_FAKE_PA_STATUS asign COMM_FUNC.inc
+					{
+						$row['pa_status'] = 3;
+					}
+				}
+				$arr_goods_img = get_goods_img_uri($row['sl_uid'], $row['g_uid'], $row['seller_g_uid'], date("ymd"), $row['img_host']);
+				$g_uid = $row['g_uid'];
+				$arr_parameter = func_ca_parameter($row['c_value']);
+				$parameter = implode("&",$arr_parameter);
+				$row['g_title'] = str_replace("&","&amp;",$row['g_title']);
+				$row['g_title'] = g_tite_str_replace($row['g_title']);
+				$g_title = $row['g_title'];
+				$row['b_name'] = str_replace("&","&amp;",$row['b_name']);
+				$b_name = $row['b_name'];
+				$b_name_cn = "";
+				if($row['b_name_cn'])
+				{
+					$b_name_cn = str_replace("&","&amp;",$row['b_name_cn']);
+				}
+				if($isSoldout==1 || $isAvailable< 2)
+				{
+					if($row['pa_status'] == 1)
+					{
+						$arr_soldout_ea_uid[] = $row['ea_uid'];
+						if($row['cpm_uid'] > 0)
+						{
+							$arr_soldout_cpm_uid[] = $row['cpm_uid'];
+						}
+					}
+					$row['t_price'] = 0;
+					$row['cp_discount_price'] = 0;
+					$row['pay_reserve'] = 0;
+				}
+				else
+				{
+				}
+				$t_price = ceil($row['t_price']);
+				if($row['pa_status'] == 12)
+				{
+					$arr_refund_ea_uid[] = $row['ea_uid'];
+					$arr_sub_refund_list[$row['ea_uid']]['price'] = $t_price;
+					$arr_sub_refund_list[$row['ea_uid']]['discount_info_price'] = $row['cp_discount_price']+$row['etc_discount_price'];
+					$arr_sub_refund_list[$row['ea_uid']]['quantity'] = $row['order_count'];
+					$t_price = 0;
+					$row['cp_discount_price'] = 0;
+					$row['etc_discount_price'] = 0;
+					$row['pay_reserve'] = 0;
+					$row['order_count'] = 0;
+				}
+				if($row['gp_uid']>0 && $row['gp_status']>0)
+				{
+					$discount_info_price = 0;
+					$gp_uid = $row['gp_uid'];
+					if($row['pa_status'] < 12)
+					{
+						$query_gp = "
+							SELECT
+								GPL.gp_uid, GPL.gp_was_price
+							FROM
+								{$goods_db}.group_purchase_list GPL
+							WHERE GPL.gp_uid={$gp_uid}
+						";
+						if($is_yes_print>0) $q_start_time=time();
+						$sql_gp = $dbconn->query($query_gp);
+						if($is_yes_print>0) get_query_runtime($q_start_time,$query_gp);//get_query_runtime assign COMM_FUNC.inc
+						if(isset($sql_gp))
+						{
+							$row_gp = $sql_gp->fetch(PDO::FETCH_ASSOC);
+							if($row_gp['gp_was_price'] > $t_price)
+							{
+								$discount_info_price = $row_gp['gp_was_price']-$t_price;
+								$t_price = $row_gp['gp_was_price'];
+							}
+							$sql_gp->closeCursor();
+						}
+					}
+				}
+				else
+				{
+					$discount_info_price = $row['cp_discount_price']+$row['etc_discount_price'];
+				}
+				$tt_price += $t_price;
+				$tt_order_count += $row['order_count'];
+				$tt_cp_discount_price += $discount_info_price;
+				if($row['pay_reserve']>0)
+				{
+					$tt_mileage_num += $row['pay_reserve']*$row['order_count'];
+				}
+				
+				if(!$row['g_option']) $row['g_option']="-";
+				else $row['g_option']=size_str_replace($row['g_option'],$row['c_value'],$row['n_code']);
+				$g_option = preg_replace("/\s+/"," ",$row['g_option']);
+				$g_color = preg_replace("/\s+/"," ",$row['g_color']);
+				$no_s_g_color = strtolower(func_tmall_str_no_space($g_color, 1));//func_str_no_space 이함수를 사용하지 않는 이유는 tmall이미지를 사용하기때문에 tmall에서 사용한 똑같은 함수를 사용함.
+				$is_same_color_img = 0;
+				if($row['paid_img_cp_num']<1 && $row['is_yz']>0 && $arr_jd_img_info[$row['g_uid']][$no_s_g_color])
+				{
+					$full_s_img = $arr_jd_img_info[$row['g_uid']][$no_s_g_color];
+					$is_same_color_img = 1;
+				}
+				else if($row['paid_img_cp_num']<1 && $row['is_tmall']>0 && $arr_tmall_img_info[$row['g_uid']][$no_s_g_color])
+				{
+					$full_s_img = $arr_tmall_img_info[$row['g_uid']][$no_s_g_color]."_200x200.jpg";
+					$is_same_color_img = 1;
+				}
+				else if($row['paid_img_cp_num']<1 && $row['is_jd']>0 && $arr_jd_img_info[$row['g_uid']][$no_s_g_color])
+				{
+					$full_s_img = $arr_jd_img_info[$row['g_uid']][$no_s_g_color];
+					$is_same_color_img = 1;
+				}
+				if($row['paid_img_cp_num']>0) $img_size="120x120";
+				else $img_size="200x200";
+				$arr_each_color_img = get_goods_each_color_img_uri($row['sl_uid'], $row['g_color'], $row['color_img_list'], $img_size, $arr_goods_img['0'], $arr_goods_img['1'], 1, $row['ea_uid'], $row['paid_img_cp_num']);
+				if($arr_each_color_img['is_static']>0 || $is_same_color_img<1)
+				{
+					$full_s_img = $arr_each_color_img['full_s_img'];
+				}
+				if($ETC_IMGGD_REQ_SCH == 'https')
+				{
+					$full_s_img = str_ireplace("http://","https://",$full_s_img);
+				}
+				//$onErrorImgStr = $arr_each_color_img['onErrorImgStr'];	
+				if($row['paid_img_cp_num']<1 && $row['isAvailable']<1 && $row['pa_status']==12)
+				{
+					//$onErrorImgStr = " onError=\"this.src='{$NO_66X66_IMG_URI}'\"";
+				}
+				if($row['pa_status']<2  && $isAvailable==2 && $isSoldout=='0')
+				{
+					$is_re_pay = 1;
+				}
+				if($row['pa_status'] > 2)
+				{
+					$is_re_addr = 0;
+				}
+				$add_pid_str = "";
+				if($row['now_is_sale'] > 0)
+				{
+					$add_pid_str = "特惠";
+				}
+				$is_view_g_title = func_is_view_g_title($row['b_code']);
+				$add_p_title = "";
+				if($is_view_g_title)
+				{
+					$arr_en_g_title = explode("^^",$row['g_title']);
+					$add_p_title = $arr_en_g_title['0'];
+					unset($arr_en_g_title);
+				}
+				$shipp_country = "us";
+				if(in_array($row['b_code'], $ARR_KR_SHIPP_B_CODE))//$ARR_KR_SHIPP_B_CODE assign COMM_FUNC.inc
+				{
+					$shipp_country = "kr";
+				}
+				else if(in_array($row['site_code'], $ARR_KR_SHIPP_SITE_CODE))//$ARR_KR_SHIPP_B_CODE assign COMM_FUNC.inc
+				{
+					$shipp_country = "kr";
+				}
+				if($row['seller_g_uid']=='QG3630524')
+				{
+					$row['seller_g_uid'] = "QG3253883";
+				}
+				$arr_sub_order_list[$r_num]['sub_oid'] = $row['ea_uid'];
+				$seller_g_uid = $row['seller_g_uid'];
+				if($row['ea_uid'] == '4294894966')
+				{
+					$seller_g_uid = "";
+					$g_color = "GREY";
+					$b_name = "";
+					$b_name_cn = "";
+				}
+				$arr_sub_order_list[$r_num]['pid'] = $seller_g_uid;
+				$arr_sub_order_list[$r_num]['add_str'] = $add_pid_str;
+				$arr_sub_order_list[$r_num]['add_p_title'] = $add_p_title;
+				if(in_array($row['g_uid'], $ARR_NOT_B_NAME_TITLE_G_UID))//$ARR_NOT_B_NAME_TITLE_G_UID assign COMM_FUNC.inc
+				{
+					$b_name = "";
+					$b_name_cn = "";
+				}
+				$arr_sub_order_list[$r_num]['b_name'] = $b_name;
+				$arr_sub_order_list[$r_num]['b_name_cn'] = $b_name_cn;
+				$arr_sub_order_list[$r_num]['link_uri'] = "/shop/goods_detail.html?pid={$g_uid}&n={$row['n_code']}&{$parameter}&oid={$pa_uid_t}";
+				$arr_sub_order_list[$r_num]['img_uri'] = $full_s_img;
+				$arr_sub_order_list[$r_num]['status_num'] = $row['pa_status'];
+				$arr_sub_order_list[$r_num]['status_str'] = payment_status_str_func($row['pa_status']);
+				$arr_sub_order_list[$r_num]['color'] = $g_color;
+				$arr_sub_order_list[$r_num]['size'] = $g_option;
+				$arr_sub_order_list[$r_num]['quantity'] = $row['order_count'];
+				$arr_sub_order_list[$r_num]['price'] = $t_price;
+				$arr_sub_order_list[$r_num]['discount_info_price'] = $discount_info_price;
+				$arr_sub_order_list[$r_num]['currency'] = "元";
+				$arr_sub_order_list[$r_num]['shipp_country'] = $shipp_country;
+				$arr_sub_order_list[$r_num]['gp_uid'] = $row['gp_uid'];
+				$arr_sub_order_list[$r_num]['gp_status'] = $row['gp_status'];
+				$r_num++;
+			}
+			$sql->closeCursor();
+			if(count($arr_soldout_cpm_uid) > 0)
+			{
+				$in_cpm_uid = implode(",",$arr_soldout_cpm_uid);
+				$query = "UPDATE {$payment_db}.a_coupon_member SET is_used=0, check_used=0, used_date=curdate() WHERE uid IN ({$in_cpm_uid})";
+				if($is_yes_print>0) $q_start_time=time();
+				$dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+			}
+			unset($arr_soldout_cpm_uid);
+			/*
+if($gp_uid>0)
+			{
+				$query = "
+					SELECT
+						GPL.gp_uid, GPL.gp_was_price
+					FROM
+						{$goods_db}.group_purchase_list GPL
+					WHERE GPL.gp_uid={$gp_uid}
+				";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				if(isset($sql))
+				{
+					$row = $sql->fetch(PDO::FETCH_ASSOC);
+					if($row['gp_was_price'] > 0)
+					{
+						$gp_was_price = $row['gp_was_price'];
+					}
+					$sql->closeCursor();
+				}
+			}
+*/
+			if(count($arr_refund_ea_uid) > 0)
+			{
+				$query = "
+					SELECT 
+						ea_uid, each_pa_status
+					FROM {$payment_db}.payment_v2_cancel_log
+					WHERE ea_uid IN (".implode(",",$arr_refund_ea_uid).")
+				";
+				if($is_yes_print>0) $q_start_time=time();
+				$sql = $dbconn->query($query);
+				if($is_yes_print>0) get_query_runtime($q_start_time,$query);//get_query_runtime assign COMM_FUNC.inc
+				if(isset($sql))
+				{
+					while($row=$sql->fetch(PDO::FETCH_ASSOC))
+					{
+						$arr_sub_refund_list[$row['ea_uid']]['ago_status_num'] = $row['each_pa_status'];
+					}
+					$sql->closeCursor();
+				}
+			}
+			unset($arr_refund_ea_uid);
+			if($a_is_special_event==1 && $b_is_special_event==1)
+			{
+				$is_re_pay = 0;
+			}
+			$subtract_price = 0;
+			if($tt_order_count > 1)
+			{
+				if($pa_uid_t == '4294967191')
+				{
+					$subtract_price = func_get_order_count_subtract($tt_order_count);
+				}
+			}
+			$pid_base_discount_price = 0;
+			if($discount_price_t>0 && $tt_price>0)
+			{
+				$arr_discount_str = func_get_discount_str($discount_type_t,1);
+				if($arr_discount_str['result'])
+				{
+					$pid_base_discount_price = $discount_price_t;
+				}
+			}
+			$tt_discount_price = $pid_base_discount_price+$tt_cp_discount_price;
+			$t_paid_price = $tt_price-$tt_discount_price-$used_reserve_t;
+			if($is_guangfa_t)
+			{
+				if($pay_reserve_t > 0)
+				{
+					$gf_r_price = $gf_r_price-$gf_discount_t;
+					$gf_reserve_percent_view = ($pay_reserve_t/$gf_r_price)*100;
+					$gf_reserve_percent_view = round($gf_reserve_percent_view);
+					$gf_reserve_percent = $gf_reserve_percent_view/100;
+				}
+				else
+				{
+					$gf_reserve_percent_view = 0;
+					$gf_reserve_percent = 0;
+				}
+			}
+			$is_available = 1;
+			if(in_array($pa_uid_t, $arr_not_re_payment))
+			{
+				$is_available = 0;
+			}
+			if($is_new_reserve && $is_available)
+			{
+				$pay_reserve_percent_num = $member_mileage_num/100;
+				$view_pay_reserve_percent_num = $member_mileage_num;
+				if($is_pay_reserve_double > 0)
+				{
+					$dot_is_pay_reserve_double = round(($is_pay_reserve_double/100),3);
+					if($member_mileage_num>1 && $is_pay_reserve_double>0.99)
+					{
+						$pay_reserve_percent_num = $pay_reserve_percent_num*2;
+					}
+					else
+					{
+						$pay_reserve_percent_num = $pay_reserve_percent_num+$dot_is_pay_reserve_double;
+					}
+					$view_pay_reserve_percent_num = $pay_reserve_percent_num*100;
+				}
+				if($is_guangfa_t && !$is_pay_reserve_double)
+				{
+					if($gf_reserve_percent > 0)
+					{
+						$pay_reserve_percent_num = $gf_reserve_percent;
+						$view_pay_reserve_percent_num = $gf_reserve_percent_view;
+					}
+					else
+					{
+						$pay_reserve_percent_num = 0;
+						$view_pay_reserve_percent_num = 0;
+					}
+				}
+				
+				$new_reserve_price = round(($tt_price-$tt_discount_price)*$pay_reserve_percent_num);
+				//echo "{$pay_reserve_t} != {$new_reserve_price}<br />";
+				if(in_array($_MEMBER['m_uid'], $ARR_NOT_MILEAGE_M_UID))
+				{
+					$new_reserve_price = 0;
+					$view_pay_reserve_percent_num = 0;
+				}
+				else if($is_no_mileage > 0)
+				{
+					$new_reserve_price = 0;
+					$view_pay_reserve_percent_num = 0;
+				}
+			}
+			if($view_pay_reserve_percent_num<1 || $new_reserve_price<1)
+			{
+				$tt_mileage_num = 0;
+			}
+			$tt_mileage_percent = $view_pay_reserve_percent_num;
+		}
+		unset($arr_tmall_img_info);
+		unset($arr_jd_img_info);
+	}
+	dbPDOClose($payment_db,$payment_host);
+	if($pay_type_t == '38')//은행송금 - 재결제시 결제타입을 상속받기 때문에 은행송금은 재결제부분을 제외시킴
+	{
+		$is_re_pay = 0;
+	}
+}
+unset($arr_req_data);
+if($is_yes_print>0) 
+{
+	echo "arr_query_runtime=";
+	echo("<pre>");print_r($arr_query_runtime);echo("</pre>");
+	unset($arr_query_runtime);
+}
+$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+$mileage_percent_str = "";
+if($view_pay_reserve_percent_num > 0)
+{
+	$mileage_percent_str = "{$view_pay_reserve_percent_num}%";
+}
+if($tt_discount_price<1 && $discount_price_t>0)
+{
+	$tt_discount_price = $discount_price_t;
+	$t_paid_price = $t_paid_price-$tt_discount_price;
+}
+$is_group_purchase = 0;
+if($gp_uid > 0)
+{
+	$is_group_purchase = 1;
+}
+$arr_result = array(
+	'result'=>$result_num,
+	'message'=>$message,
+	'oid'=>$pa_uid_t,
+	't_price'=>$tt_price,
+	't_discount_price'=>$tt_discount_price,
+	'used_mileage'=>$used_reserve_t,
+	'add_mileage'=>$new_reserve_price,
+	'mileage_percent_str'=>$mileage_percent_str,
+	'order_time'=>$order_time_str,
+	'paid_t_price'=>$t_paid_price,
+	'paid_type'=>$pay_type_str,
+	'paid_time'=>$pay_time_str,
+	'is_g_p'=>$is_group_purchase,
+	'was_g_price'=>$gp_was_price,
+	'is_available_reorder'=>$is_re_pay,
+	'sub_order_list'=>$arr_sub_order_list,
+	'sub_refund_list'=>$arr_sub_refund_list,
+	'is_modify_addr'=>$is_re_addr,
+	'orderer_name'=>$orderer_name,
+	'receiver_list'=>$arr_receiver_list
+);
+unset($arr_sub_order_list);
+unset($arr_sub_refund_list);
+unset($arr_receiver_list);
+if($is_yes_print>1)
+{
+	echo "arr_result=";
+	echo("<pre>");print_r($arr_result);echo("</pre>");
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>

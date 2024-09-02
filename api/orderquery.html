@@ -1,0 +1,145 @@
+<?
+$is_need_json_header = 1;
+if(!$IS_M_CONFIG) include_once "{$_SERVER['DOCUMENT_ROOT']}/inc/config.inc";
+if(!$IS_API_CONFIG) include_once "PUBLIC_FUNC/BUYFINE/api/config.inc";
+include_once "PUBLIC_FUNC/BUYFINE/COMM_FUNC.inc";
+include_once "PUBLIC_FUNC/BUYFINE/func_core.inc";
+if(!$IS_FUNC_EXTRA) include_once "PUBLIC_FUNC/BUYFINE/func_extra.inc";
+if(!$INCLUDE_MEMBER) include_once "{$_SERVER['DOCUMENT_ROOT']}/member/auth_info.inc";
+
+$is_json_result_test = 0;
+if($is_json_result_test > 0)
+{
+	$result_num = 1;
+	$arr_result = array(
+		'result'=>$result_num,
+		'message'=>'',
+		'is_change'=>1
+	);
+	echo json_encode($arr_result);
+	unset($arr_result);
+	exit;
+}
+$is_no_err = 1;
+$result_num = 0;
+if($is_no_err > 0)
+{
+	if(!$IS_API_PUBLIC_VARS) include_once "{$_SERVER['DOCUMENT_ROOT']}/api_v2/_public_var.inc";//return $arr_req_data, $is_no_err
+}
+$is_yes_print = 0;
+$mail_content = "";
+if($is_no_err>0 && !$_MEMBER['m_uid'])
+{
+	$is_no_err = 0;
+	$result_num = -23;
+}
+if($is_no_err>0 && !$arr_req_data['uids'])
+{
+	$is_no_err = 0;
+	$result_num = -2;
+}
+if($is_yes_print > 0)
+{
+	$arr_query_runtime = array();
+	$query_runtime_idx = 0;
+	$mail_content = "REMOTE_ADDR=".$_SERVER['REMOTE_ADDR']."\n";
+}
+$is_change = 0;
+$static_err_msg = "";
+$arr_pa_uid = array();
+$uids = "";
+if($is_no_err > 0)
+{
+	$arr_temp_pa_uid = explode("^",$arr_req_data['uids']);
+	foreach($arr_temp_pa_uid AS $pa_uid)
+	{
+		$pa_uid = preg_replace("/\s+/","",$pa_uid);
+		if(!$pa_uid) continue;
+		$pa_uid = floatval($pa_uid);//mysql int(11) MAX=4294967295, int(10) MAX=2147483647 -  intval로처리하면 MAX값이 2147483647이걸로 처리됨
+		if(!is_numeric($pa_uid)) continue;
+		$arr_pa_uid[] = $pa_uid;
+	}
+	unset($arr_temp_pa_uid);
+	if(count($arr_pa_uid) > 0)
+	{
+		$uids = implode("^", $arr_pa_uid);
+		$uids = urlencode($uids);
+	}
+}
+$ct_uids = count($arr_pa_uid);
+if($is_no_err>0 && $ct_uids<1)
+{
+	$is_no_err = 0;
+	$result_num = -2;
+}
+if($is_yes_print > 0)
+{
+	$mail_content .= "arr_req_data['uids']={$arr_req_data['uids']} / uids=".implode(",", $arr_pa_uid)." \n";
+}
+if($is_no_err > 0)
+{
+	$result_num = 1;
+	$dbconn = dbPDOConn($payment_db,$payment_host);
+	$query = "SELECT pa_uid, pa_status, isAvailable FROM {$payment_db}.payment_v2 P WHERE P.pa_uid IN (".implode(",", $arr_pa_uid).") AND P.m_uid={$_MEMBER['m_uid']}";
+	if($is_yes_print>0) $q_start_time=time();
+	$sql = $dbconn->prepare($query);
+	$sql->execute();
+	if($is_yes_print>0) get_query_runtime($q_start_time,$query);
+	if(isset($sql))
+	{
+		while($row=$sql->fetch(PDO::FETCH_ASSOC))
+		{
+			if($row['pa_status'] > 1)
+			{
+				$is_change = 1;
+				break;
+			}
+			if($row['isAvailable'] < 1)
+			{
+				$is_change = 1;
+				break;
+			}
+		}
+		$sql->closeCursor();
+	}
+	dbPDOClose($payment_db,$payment_host);
+}
+unset($arr_pa_uid);
+$message = $arr_result_message_info[$result_num];//$arr_result_message_info api/config.inc
+if($static_err_msg) $message=$static_err_msg;
+$arr_result = array(
+	'result'=>$result_num,
+	'message'=>$message,
+	'uids'=>$uids,
+	'is_change'=>$is_change
+);
+if($is_yes_print>0)
+{
+	if(count($arr_query_runtime) > 0)
+	{
+		$mail_content .= "arr_query_runtime = \n";
+		foreach($arr_query_runtime AS $value)
+		{
+			$mail_content .= "{$value}\n";
+		}
+	}
+	unset($arr_query_runtime);
+	$mail_content .= "arr_result = \n";
+	foreach($arr_result AS $key=>$value)
+	{
+		$mail_content .= "{$key}={$value}\n";
+	}
+	$admin_from_mail = "vip.member@buyfine.net";
+	$admin_to_mail = "alex.yoon@buyfine.net";
+	$admin_from_name = "Alex";
+	$admin_mail_type = "text/plain"; //text/html 
+	$mail_subject = "[!!!@@@Order] Pending Check".date("Y-m-d H:i");
+	if($IS_ACTIVE_SOCK_EMAIL > 0)//$IS_ACTIVE_SOCK_EMAIL assign COMM_FUNC.inc
+	{
+		fsockopen_mail($admin_to_mail,$admin_from_mail,$admin_from_name,$mail_subject,$mail_content,$admin_mail_type);
+	}
+	unset($mail_subject);
+}
+echo json_encode($arr_result);
+unset($arr_result);
+?>
